@@ -1,0 +1,10 @@
+{
+  "extension.displayName": "Дерево проектов",
+  "extension.description": "Отображает в боковой панели VS Code дерево ваших локальных проектов.",
+  "viewsContainers.projectTree.title": "Дерево проектов",
+  "views.projectTree.name": "Дерево проектов",
+  "commands.editConfig.title": "Изменить конфиг",
+  "commands.refresh.title": "Обновить",
+  "commands.openHere.title": "Открыть проект (текущее окно)",
+  "commands.openNew.title": "Открыть проект (новое окно)"
+}

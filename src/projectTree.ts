@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { localize } from "./localize";
 
 export interface Project {
   label: string;
@@ -18,6 +19,11 @@ export type RootConfig = {
 };
 
 export type NodeType = "category" | "project";
+
+const CONFIG_ERROR_DESCRIPTION = localize(
+  "tree.configError",
+  "Config error"
+);
 
 export class ProjectTreeItem extends vscode.TreeItem {
   constructor(
@@ -42,7 +48,7 @@ export class ProjectTreeItem extends vscode.TreeItem {
 
     if (nodeType === "project") {
       this.contextValue = "projectTree.project";
-      this.description = hasErrors ? "Ошибка конфигурации" : undefined;
+      this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;
       this.iconPath = hasErrors
         ? new vscode.ThemeIcon("warning")
         : new vscode.ThemeIcon("project");
@@ -53,7 +59,7 @@ export class ProjectTreeItem extends vscode.TreeItem {
       };*/
     } else {
       this.contextValue = "projectTree.category";
-      this.description = hasErrors ? "Ошибка конфигурации" : undefined;
+      this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;
       this.iconPath = new vscode.ThemeIcon("folder");
     }
   }
@@ -236,10 +242,13 @@ export class ProjectTreeDataProvider
       this.config = this.validateAndNormalizeConfig(parsed);
     } catch (err) {
       const message = (err as Error).message;
-      vscode.window.showErrorMessage(
-        `Project Tree: не удалось прочитать конфиг: ${message}`
+      const localized = localize(
+        "error.configRead",
+        "Project Tree: failed to read config: {0}",
+        message
       );
-      this.recordIssue("__root__", `Не удалось прочитать конфиг: ${message}`);
+      vscode.window.showErrorMessage(localized);
+      this.recordIssue("__root__", localized);
       this.config = {};
     } finally {
       this.handleValidationWarning();
@@ -250,7 +259,10 @@ export class ProjectTreeDataProvider
     if (!this.isPlainObject(raw)) {
       this.recordIssue(
         "__root__",
-        "Конфиг projects.json должен быть объектом категорий."
+        localize(
+          "error.configShape",
+          "projects.json must be an object with categories."
+        )
       );
       return {};
     }
@@ -260,7 +272,10 @@ export class ProjectTreeDataProvider
       if (!this.isPlainObject(value)) {
         this.recordIssue(
           name,
-          "Категория должна быть объектом с вложенными проектами."
+          localize(
+            "error.categoryShape",
+            "Category must be an object with nested projects."
+          )
         );
         continue;
       }
@@ -289,7 +304,10 @@ export class ProjectTreeDataProvider
       } else {
         this.recordIssue(
           `${pathKey}.projects`,
-          "`projects` должно быть массивом проектов."
+          localize(
+            "error.projectsArray",
+            "`projects` must be an array of projects."
+          )
         );
       }
     }
@@ -314,9 +332,12 @@ export class ProjectTreeDataProvider
 
   private normalizeProject(value: unknown, pathKey: string): Project {
     if (!this.isPlainObject(value)) {
-      this.recordIssue(pathKey, "Проект должен быть объектом.");
+      this.recordIssue(
+        pathKey,
+        localize("error.projectShape", "Project entry must be an object.")
+      );
       return {
-        label: "Некорректный проект",
+        label: localize("label.invalidProject", "Invalid project"),
         path: ""
       };
     }
@@ -329,14 +350,20 @@ export class ProjectTreeDataProvider
     if (typeof labelValue !== "string" || !labelValue.trim()) {
       this.recordIssue(
         `${pathKey}.label`,
-        "Поле `label` обязательно и должно быть строкой."
+        localize(
+          "error.labelRequired",
+          "`label` is required and must be a string."
+        )
       );
     }
 
     if (typeof pathValue !== "string" || !pathValue.trim()) {
       this.recordIssue(
         `${pathKey}.path`,
-        "Поле `path` обязательно и должно быть строкой."
+        localize(
+          "error.pathRequired",
+          "`path` is required and must be a string."
+        )
       );
     }
 
@@ -344,7 +371,7 @@ export class ProjectTreeDataProvider
       label:
         typeof labelValue === "string" && labelValue.trim()
           ? labelValue
-          : "Без названия",
+          : localize("label.untitledProject", "Untitled"),
       path:
         typeof pathValue === "string" && pathValue.trim()
           ? pathValue
@@ -358,11 +385,14 @@ export class ProjectTreeDataProvider
       this.hadValidationErrors = true;
       vscode.window
         .showWarningMessage(
-          "Project Tree: обнаружены ошибки в projects.json",
-          "Edit Config"
+          localize(
+            "warning.configIssues",
+            "Project Tree: there are errors in projects.json"
+          ),
+          localize("action.editConfig", "Edit Config")
         )
         .then((selection) => {
-          if (selection === "Edit Config") {
+          if (selection === localize("action.editConfig", "Edit Config")) {
             vscode.commands.executeCommand("projectTree.openConfig");
           }
         });

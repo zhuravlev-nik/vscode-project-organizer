@@ -1,7 +1,7 @@
 {
   "name": "vcode-project-tree",
-  "displayName": "vcode-project-tree",
-  "description": "",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
   "publisher": "nzhuravlev",
   "version": "0.0.1",
   "license": "MIT",
@@ -23,7 +23,7 @@
       "activitybar": [
         {
           "id": "projectTree",
-          "title": "Project Tree",
+          "title": "%viewsContainers.projectTree.title%",
           "icon": "resources/project-tree-icon.svg"
         }
       ]
@@ -32,29 +32,29 @@
       "projectTree": [
         {
           "id": "projectTreeView",
-          "name": "Project Tree"
+          "name": "%views.projectTree.name%"
         }
       ]
     },
     "commands": [
       {
         "command": "projectTree.openConfig",
-        "title": "Edit Config",
+          "title": "%commands.editConfig.title%",
         "icon": "$(pencil)"
       },
       {
         "command": "projectTree.refresh",
-        "title": "Refresh",
+          "title": "%commands.refresh.title%",
         "icon": "$(refresh)"
       },
       {
         "command": "projectTree.openProjectHere",
-        "title": "Open Project (Current Window)",
+          "title": "%commands.openHere.title%",
         "icon": "$(file-code)"
       },
       {
         "command": "projectTree.openProject",
-        "title": "Open Project (New Window)",
+          "title": "%commands.openNew.title%",
         "icon": "$(window)"
       }
     ],
