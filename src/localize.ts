@@ -29,7 +29,9 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.saveError": "Failed to save projects.json: {0}",
     "filter.prompt": "Filter projects by name or path",
     "filter.clear": "Filter cleared",
-    "filter.activeMessage": "Filtering by \"{0}\""
+    "filter.activeMessage": "Filtering by \"{0}\"",
+    "project.tooltip.originalPath": "Config path: {0}",
+    "project.tooltip.resolvedPath": "Resolved path: {0}"
   },
   ru: {
     "tree.configError": "Ошибка конфигурации",
@@ -54,7 +56,9 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.saveError": "Не удалось сохранить projects.json: {0}",
     "filter.prompt": "Фильтр по названию или пути проекта",
     "filter.clear": "Фильтр сброшен",
-    "filter.activeMessage": "Фильтр: «{0}»"
+    "filter.activeMessage": "Фильтр: «{0}»",
+    "project.tooltip.originalPath": "Путь в конфиге: {0}",
+    "project.tooltip.resolvedPath": "Абсолютный путь: {0}"
   }
 };
 

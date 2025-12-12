@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { localize } from "./localize";
 
 export interface Project {
@@ -31,20 +32,42 @@ export class ProjectTreeItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly nodeType: NodeType,
     public readonly projectPath?: string,
+    public readonly rawProjectPath?: string,
     public readonly categoryNode?: CategoryNode,
     public readonly configPath?: string,
     public readonly errors: string[] = []
   ) {
     super(label, collapsibleState);
     const hasErrors = errors.length > 0;
-    const tooltipParts: string[] = [];
-    if (nodeType === "project" && projectPath) {
-      tooltipParts.push(projectPath);
+    if (nodeType === "project") {
+      const tooltipParts: string[] = [];
+      if (this.rawProjectPath) {
+        tooltipParts.push(
+          localize(
+            "project.tooltip.originalPath",
+            "Config path: {0}",
+            this.rawProjectPath
+          )
+        );
+      }
+      if (this.projectPath && this.projectPath !== this.rawProjectPath) {
+        tooltipParts.push(
+          localize(
+            "project.tooltip.resolvedPath",
+            "Resolved path: {0}",
+            this.projectPath
+          )
+        );
+      } else if (this.projectPath && tooltipParts.length === 0) {
+        tooltipParts.push(this.projectPath);
+      }
+      if (hasErrors) {
+        tooltipParts.push(...errors);
+      }
+      this.tooltip = tooltipParts.length > 0 ? tooltipParts.join("\n") : undefined;
+    } else if (hasErrors) {
+      this.tooltip = errors.join("\n");
     }
-    if (hasErrors) {
-      tooltipParts.push(...errors);
-    }
-    this.tooltip = tooltipParts.length > 0 ? tooltipParts.join("\n") : undefined;
 
     if (nodeType === "project") {
       this.contextValue = "projectTree.project";
@@ -79,6 +102,7 @@ export class ProjectTreeDataProvider
   private filterText = "";
   private normalizedFilter = "";
   private treeView?: vscode.TreeView<ProjectTreeItem>;
+  private resolvedPathCache: WeakMap<Project, string> = new WeakMap();
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.loadConfig();
@@ -127,6 +151,7 @@ export class ProjectTreeDataProvider
             : vscode.TreeItemCollapsibleState.Collapsed,
           "category",
           undefined,
+          undefined,
           node,
           configPath,
           this.getIssuesForKey(configPath)
@@ -150,11 +175,13 @@ export class ProjectTreeDataProvider
             element.configPath ?? element.label,
             index
           );
+          const resolvedPath = this.getProjectResolvedPath(proj);
           items.push(
             new ProjectTreeItem(
               proj.label,
               vscode.TreeItemCollapsibleState.None,
               "project",
+              resolvedPath,
               proj.path,
               undefined,
               projectKey,
@@ -182,6 +209,7 @@ export class ProjectTreeDataProvider
                 ? vscode.TreeItemCollapsibleState.Expanded
                 : vscode.TreeItemCollapsibleState.Collapsed,
               "category",
+              undefined,
               undefined,
               value as CategoryNode,
               childPath,
@@ -307,7 +335,7 @@ export class ProjectTreeDataProvider
 
     targetNode.projects.push({
       label,
-      path: folderPath
+      path: this.formatPathForConfig(folderPath)
     });
 
     const categoryDisplay = this.formatCategoryPath(targetPath);
@@ -389,7 +417,11 @@ export class ProjectTreeDataProvider
       return true;
     }
 
-    return this.matchesFilterText(project.path);
+    if (this.matchesFilterText(project.path)) {
+      return true;
+    }
+
+    return this.matchesFilterText(this.getProjectResolvedPath(project));
   }
 
   private categoryMatchesFilter(name: string, node: CategoryNode): boolean {
@@ -418,6 +450,69 @@ export class ProjectTreeDataProvider
     }
 
     return false;
+  }
+
+  private getProjectResolvedPath(project: Project): string {
+    const cached = this.resolvedPathCache.get(project);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const resolved = this.resolveProjectPathValue(project.path);
+    this.resolvedPathCache.set(project, resolved);
+    return resolved;
+  }
+
+  private resolveProjectPathValue(rawPath: string): string {
+    const input = rawPath?.trim();
+    if (!input) {
+      return "";
+    }
+
+    let expanded = input;
+    const homeDir = os.homedir();
+
+    if (expanded.startsWith("~")) {
+      const remainder = expanded.slice(1);
+      if (!remainder || remainder.startsWith("/") || remainder.startsWith("\\")) {
+        const relativePart = remainder.replace(/^[\\/]/, "");
+        expanded = path.join(homeDir, relativePart);
+      }
+    }
+
+    if (!path.isAbsolute(expanded)) {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (workspaceFolder) {
+        expanded = path.join(workspaceFolder, expanded);
+      } else {
+        expanded = path.join(homeDir, expanded);
+      }
+    }
+
+    return path.normalize(expanded);
+  }
+
+  private formatPathForConfig(fullPath: string): string {
+    const normalized = path.normalize(fullPath);
+    const homeDir = path.normalize(os.homedir());
+
+    const normalizedLower = normalized.toLowerCase();
+    const homeLower = homeDir.toLowerCase();
+
+    if (normalizedLower === homeLower) {
+      return "~";
+    }
+
+    if (normalizedLower.startsWith(homeLower + path.sep)) {
+      const relative = normalized.slice(homeDir.length + 1);
+      return `~/${this.toPosixPath(relative)}`;
+    }
+
+    return this.toPosixPath(normalized);
+  }
+
+  private toPosixPath(value: string): string {
+    return value.replace(/\\/g, "/");
   }
 
   private updateTreeMessage(): void {
@@ -478,6 +573,7 @@ export class ProjectTreeDataProvider
   private loadConfig(): void {
     const configPath = this.getConfigPath();
     this.validationIssues.clear();
+    this.resolvedPathCache = new WeakMap();
 
     try {
       if (!fs.existsSync(configPath)) {
