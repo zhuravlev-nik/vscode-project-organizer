@@ -26,7 +26,10 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.newCategory": "Create new category…",
     "addProject.enterCategory": "Enter new category name",
     "addProject.success": "Project \"{0}\" added to \"{1}\".",
-    "addProject.saveError": "Failed to save projects.json: {0}"
+    "addProject.saveError": "Failed to save projects.json: {0}",
+    "filter.prompt": "Filter projects by name or path",
+    "filter.clear": "Filter cleared",
+    "filter.activeMessage": "Filtering by \"{0}\""
   },
   ru: {
     "tree.configError": "Ошибка конфигурации",
@@ -48,7 +51,10 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.newCategory": "Создать новую категорию…",
     "addProject.enterCategory": "Введите название категории",
     "addProject.success": "Проект «{0}» добавлен в «{1}».",
-    "addProject.saveError": "Не удалось сохранить projects.json: {0}"
+    "addProject.saveError": "Не удалось сохранить projects.json: {0}",
+    "filter.prompt": "Фильтр по названию или пути проекта",
+    "filter.clear": "Фильтр сброшен",
+    "filter.activeMessage": "Фильтр: «{0}»"
   }
 };
 

@@ -7,5 +7,6 @@
   "commands.refresh.title": "Обновить",
   "commands.openHere.title": "Открыть проект (текущее окно)",
   "commands.openNew.title": "Открыть проект (новое окно)",
-  "commands.addProject.title": "Добавить проект"
+  "commands.addProject.title": "Добавить проект",
+  "commands.filter.title": "Фильтр проектов"
 }
