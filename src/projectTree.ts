@@ -7,6 +7,7 @@ import { localize } from "./localize";
 export interface Project {
   label: string;
   path: string;
+  icon?: string;
 }
 
 
@@ -33,6 +34,7 @@ export class ProjectTreeItem extends vscode.TreeItem {
     public readonly nodeType: NodeType,
     public readonly projectPath?: string,
     public readonly rawProjectPath?: string,
+    public readonly iconId?: string,
     public readonly categoryNode?: CategoryNode,
     public readonly configPath?: string,
     public readonly errors: string[] = []
@@ -74,7 +76,7 @@ export class ProjectTreeItem extends vscode.TreeItem {
       this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;
       this.iconPath = hasErrors
         ? new vscode.ThemeIcon("warning")
-        : new vscode.ThemeIcon("project");
+        : new vscode.ThemeIcon(this.iconId ?? "project");
       /*this.command = {
         title: "Open Project (Current Window)",
         command: "projectTree.openProjectHere",
@@ -152,6 +154,7 @@ export class ProjectTreeDataProvider
           "category",
           undefined,
           undefined,
+          undefined,
           node,
           configPath,
           this.getIssuesForKey(configPath)
@@ -183,6 +186,7 @@ export class ProjectTreeDataProvider
               "project",
               resolvedPath,
               proj.path,
+              this.getProjectIconId(proj),
               undefined,
               projectKey,
               this.getIssuesForKey(projectKey)
@@ -209,6 +213,7 @@ export class ProjectTreeDataProvider
                 ? vscode.TreeItemCollapsibleState.Expanded
                 : vscode.TreeItemCollapsibleState.Collapsed,
               "category",
+              undefined,
               undefined,
               undefined,
               value as CategoryNode,
@@ -394,6 +399,11 @@ export class ProjectTreeDataProvider
     }
 
     return this.validationIssues.get(key) ?? [];
+  }
+
+  private getProjectIconId(project: Project): string | undefined {
+    const icon = project.icon?.trim();
+    return icon ? icon : undefined;
   }
 
   private hasActiveFilter(): boolean {
@@ -701,6 +711,7 @@ export class ProjectTreeDataProvider
 
     const labelValue = project.label;
     const pathValue = project.path;
+    const iconValue = project.icon;
 
     if (typeof labelValue !== "string" || !labelValue.trim()) {
       this.recordIssue(
@@ -722,6 +733,18 @@ export class ProjectTreeDataProvider
       );
     }
 
+    let resolvedIcon: string | undefined;
+    if (iconValue !== undefined) {
+      if (typeof iconValue === "string" && iconValue.trim()) {
+        resolvedIcon = iconValue.trim();
+      } else {
+        this.recordIssue(
+          `${pathKey}.icon`,
+          localize("error.iconString", "`icon` must be a string with a codicon id.")
+        );
+      }
+    }
+
     return {
       label:
         typeof labelValue === "string" && labelValue.trim()
@@ -730,7 +753,8 @@ export class ProjectTreeDataProvider
       path:
         typeof pathValue === "string" && pathValue.trim()
           ? pathValue
-          : ""
+          : "",
+      icon: resolvedIcon
     };
   }
 
