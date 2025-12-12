@@ -1,0 +1,9 @@
+node_modules/
+out/
+*.vsix
+.vscode-test.mjs
+.DS_Store
+.vscode-test/
+*.log
+.vs
+

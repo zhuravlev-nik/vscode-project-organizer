@@ -1,0 +1,34 @@
+# Project Tree
+
+Project Tree shows a custom tree of your local projects in the Activity Bar.
+
+## Features
+
+- Project categories and projects are loaded from a JSON config file.
+- Open config directly from the view.
+- Refresh the tree.
+- Open a project in the current window or in a new window.
+
+## Config location
+
+The config is stored in VS Code global storage:
+
+`<globalStorage>/projects.json`
+
+You can open it from the view using **Project Tree: Edit Config**.
+
+## Config format
+
+```json
+{
+  "Work": {
+    "projects": [
+      { "label": "My Project", "path": "/home/user/projects/my-project" }
+    ],
+    "Client": {
+      "projects": [
+        { "label": "Client App", "path": "/home/user/projects/client-app" }
+      ]
+    }
+  }
+}

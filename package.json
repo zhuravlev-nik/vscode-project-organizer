@@ -1,0 +1,101 @@
+{
+  "name": "vcode-project-tree",
+  "displayName": "vcode-project-tree",
+  "description": "",
+  "publisher": "nzhuravlev",
+  "version": "0.0.1",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:projectTreeView",
+    "onCommand:projectTree.openConfig",
+    "onCommand:projectTree.refresh",
+    "onCommand:projectTree.openProject"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "projectTree",
+          "title": "Project Tree",
+          "icon": "resources/project-tree-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "projectTree": [
+        {
+          "id": "projectTreeView",
+          "name": "Project Tree"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "projectTree.openConfig",
+        "title": "Edit Config",
+        "icon": "$(pencil)"
+      },
+      {
+        "command": "projectTree.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "projectTree.openProjectHere",
+        "title": "Open Project (Current Window)",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "projectTree.openProject",
+        "title": "Open Project (New Window)",
+        "icon": "$(window)"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "projectTree.openProjectHere",
+          "when": "view == projectTreeView && viewItem == projectTree.project",
+          "group": "inline@1"
+        },
+        {
+          "command": "projectTree.openProject",
+          "when": "view == projectTreeView && viewItem == projectTree.project",
+          "group": "inline@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "projectTree.refresh",
+          "when": "view == projectTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "projectTree.openConfig",
+          "when": "view == projectTreeView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.107.0",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.48.1",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3"
+  }
+}
