@@ -7,6 +7,5 @@
   "commands.refresh.title": "Refresh",
   "commands.openHere.title": "Open Project (Current Window)",
   "commands.openNew.title": "Open Project (New Window)",
-  "commands.addProject.title": "Add Project",
-  "commands.filter.title": "Filter Projects"
+  "commands.addProject.title": "Add Project"
 }

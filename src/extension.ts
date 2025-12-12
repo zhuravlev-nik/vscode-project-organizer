@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { ProjectTreeDataProvider, ProjectTreeItem } from "./projectTree";
-import { localize } from "./localize";
 
 let treeDataProvider: ProjectTreeDataProvider | null = null;
 
@@ -10,7 +9,6 @@ export function activate(context: vscode.ExtensionContext) {
   const treeView = vscode.window.createTreeView("projectTreeView", {
     treeDataProvider
   });
-  treeDataProvider.registerTreeView(treeView);
 
   context.subscriptions.push(treeView, treeDataProvider);
   context.subscriptions.push(
@@ -35,32 +33,6 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("projectTree.refresh", () => {
       treeDataProvider?.refresh();
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("projectTree.filter", async () => {
-      if (!treeDataProvider) {
-        return;
-      }
-
-      const value = await vscode.window.showInputBox({
-        prompt: localize("filter.prompt", "Filter projects by name or path"),
-        placeHolder: localize("filter.prompt", "Filter projects by name or path"),
-        value: treeDataProvider.getFilter()
-      });
-
-      if (value === undefined) {
-        return;
-      }
-
-      treeDataProvider.setFilter(value);
-
-      if (!value.trim()) {
-        vscode.window.showInformationMessage(
-          localize("filter.clear", "Filter cleared")
-        );
-      }
     })
   );
 

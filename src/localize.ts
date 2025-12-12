@@ -28,9 +28,6 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.enterCategory": "Enter new category name",
     "addProject.success": "Project \"{0}\" added to \"{1}\".",
     "addProject.saveError": "Failed to save projects.json: {0}",
-    "filter.prompt": "Filter projects by name or path",
-    "filter.clear": "Filter cleared",
-    "filter.activeMessage": "Filtering by \"{0}\"",
     "project.tooltip.originalPath": "Config path: {0}",
     "project.tooltip.resolvedPath": "Resolved path: {0}"
   },
@@ -56,9 +53,6 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.enterCategory": "Введите название категории",
     "addProject.success": "Проект «{0}» добавлен в «{1}».",
     "addProject.saveError": "Не удалось сохранить projects.json: {0}",
-    "filter.prompt": "Фильтр по названию или пути проекта",
-    "filter.clear": "Фильтр сброшен",
-    "filter.activeMessage": "Фильтр: «{0}»",
     "project.tooltip.originalPath": "Путь в конфиге: {0}",
     "project.tooltip.resolvedPath": "Абсолютный путь: {0}"
   }

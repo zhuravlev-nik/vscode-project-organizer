@@ -101,9 +101,6 @@ export class ProjectTreeDataProvider
   private watcher?: fs.FSWatcher;
   private validationIssues: Map<string, string[]> = new Map();
   private hadValidationErrors = false;
-  private filterText = "";
-  private normalizedFilter = "";
-  private treeView?: vscode.TreeView<ProjectTreeItem>;
   private resolvedPathCache: WeakMap<Project, string> = new WeakMap();
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -141,16 +138,10 @@ export class ProjectTreeDataProvider
     if (!element) {
       const items: ProjectTreeItem[] = [];
       for (const [name, node] of Object.entries(this.config)) {
-        if (!this.categoryMatchesFilter(name, node)) {
-          continue;
-        }
-
         const configPath = name;
         const categoryItem = new ProjectTreeItem(
           name,
-          this.hasActiveFilter()
-            ? vscode.TreeItemCollapsibleState.Expanded
-            : vscode.TreeItemCollapsibleState.Collapsed,
+          vscode.TreeItemCollapsibleState.Collapsed,
           "category",
           undefined,
           undefined,
@@ -171,9 +162,6 @@ export class ProjectTreeDataProvider
 
       if (Array.isArray(node.projects)) {
         node.projects.forEach((proj, index) => {
-          if (!this.projectMatchesFilter(proj)) {
-            return;
-          }
           const projectKey = this.buildProjectKey(
             element.configPath ?? element.label,
             index
@@ -198,10 +186,6 @@ export class ProjectTreeDataProvider
       for (const [key, value] of Object.entries(node)) {
         if (key === "projects") continue;
         if (typeof value === "object" && value !== null) {
-          if (!this.categoryMatchesFilter(key, value as CategoryNode)) {
-            continue;
-          }
-
           const childPath = this.joinConfigPath(
             element.configPath ?? element.label,
             key
@@ -209,9 +193,7 @@ export class ProjectTreeDataProvider
           items.push(
             new ProjectTreeItem(
               key,
-              this.hasActiveFilter()
-                ? vscode.TreeItemCollapsibleState.Expanded
-                : vscode.TreeItemCollapsibleState.Collapsed,
+              vscode.TreeItemCollapsibleState.Collapsed,
               "category",
               undefined,
               undefined,
@@ -229,26 +211,9 @@ export class ProjectTreeDataProvider
 
     return Promise.resolve([]);
   }
-
-  registerTreeView(treeView: vscode.TreeView<ProjectTreeItem>): void {
-    this.treeView = treeView;
-    this.updateTreeMessage();
-  }
-
-  getFilter(): string {
-    return this.filterText;
-  }
-
+ 
   refresh(): void {
     this.loadConfig();
-    this._onDidChangeTreeData.fire();
-  }
-
-  setFilter(filter: string): void {
-    const trimmed = filter.trim();
-    this.filterText = trimmed;
-    this.normalizedFilter = trimmed.toLowerCase();
-    this.updateTreeMessage();
     this._onDidChangeTreeData.fire();
   }
 
@@ -406,62 +371,6 @@ export class ProjectTreeDataProvider
     return icon ? icon : undefined;
   }
 
-  private hasActiveFilter(): boolean {
-    return this.normalizedFilter.length > 0;
-  }
-
-  private matchesFilterText(value: string | undefined): boolean {
-    if (!this.hasActiveFilter() || !value) {
-      return true;
-    }
-
-    return value.toLowerCase().includes(this.normalizedFilter);
-  }
-
-  private projectMatchesFilter(project: Project): boolean {
-    if (!this.hasActiveFilter()) {
-      return true;
-    }
-
-    if (this.matchesFilterText(project.label)) {
-      return true;
-    }
-
-    if (this.matchesFilterText(project.path)) {
-      return true;
-    }
-
-    return this.matchesFilterText(this.getProjectResolvedPath(project));
-  }
-
-  private categoryMatchesFilter(name: string, node: CategoryNode): boolean {
-    if (!this.hasActiveFilter()) {
-      return true;
-    }
-
-    if (this.matchesFilterText(name)) {
-      return true;
-    }
-
-    if (
-      Array.isArray(node.projects) &&
-      node.projects.some((proj) => this.projectMatchesFilter(proj))
-    ) {
-      return true;
-    }
-
-    for (const [key, value] of Object.entries(node)) {
-      if (key === "projects") {
-        continue;
-      }
-      if (this.isPlainObject(value) && this.categoryMatchesFilter(key, value as CategoryNode)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   private getProjectResolvedPath(project: Project): string {
     const cached = this.resolvedPathCache.get(project);
     if (cached !== undefined) {
@@ -523,22 +432,6 @@ export class ProjectTreeDataProvider
 
   private toPosixPath(value: string): string {
     return value.replace(/\\/g, "/");
-  }
-
-  private updateTreeMessage(): void {
-    if (!this.treeView) {
-      return;
-    }
-
-    if (this.hasActiveFilter()) {
-      this.treeView.message = localize(
-        "filter.activeMessage",
-        'Filtering by "{0}"',
-        this.filterText
-      );
-    } else {
-      this.treeView.message = undefined;
-    }
   }
 
   private collectCategoryNodes(): Array<{ path: string[]; node: CategoryNode }> {
