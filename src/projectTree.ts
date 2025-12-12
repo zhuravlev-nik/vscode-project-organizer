@@ -211,21 +211,26 @@ export class ProjectTreeDataProvider
     }
 
     this.loadConfig();
-    const categories = Object.keys(this.config);
-    type CategoryPick = vscode.QuickPickItem & { value: string; createNew?: boolean };
+    type CategoryPick = vscode.QuickPickItem & {
+      pathSegments?: string[];
+      node?: CategoryNode;
+      createNew?: boolean;
+    };
 
+    const categoryNodes = this.collectCategoryNodes();
     const newCategoryLabel = localize(
       "addProject.newCategory",
       "Create new category…"
     );
 
-    const picks: CategoryPick[] = categories.map((name) => ({
-      label: name,
-      value: name
+    const picks: CategoryPick[] = categoryNodes.map((category) => ({
+      label: this.formatCategoryPath(category.path),
+      pathSegments: category.path,
+      node: category.node
     }));
+
     picks.push({
       label: newCategoryLabel,
-      value: "__new__",
       description: localize("addProject.enterCategory", "Enter new category name"),
       createNew: true
     });
@@ -238,32 +243,39 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    let categoryName = selected.value;
+    let targetNode: CategoryNode | undefined = selected.node;
+    let targetPath = selected.pathSegments ?? [];
+
     if (selected.createNew) {
       const categoryInput = await vscode.window.showInputBox({
         prompt: localize("addProject.enterCategory", "Enter new category name")
       });
-      categoryName = categoryInput?.trim() ?? "";
+      const categoryName = categoryInput?.trim();
       if (!categoryName) {
         return;
       }
+      targetPath = [categoryName];
+      targetNode =
+        this.config[categoryName] && typeof this.config[categoryName] === "object"
+          ? this.config[categoryName]
+          : {};
+      this.config[categoryName] = targetNode;
     }
 
-    const categoryNode =
-      this.config[categoryName] && typeof this.config[categoryName] === "object"
-        ? this.config[categoryName]
-        : {};
-
-    if (!Array.isArray(categoryNode.projects)) {
-      categoryNode.projects = [];
+    if (!targetNode) {
+      return;
     }
 
-    categoryNode.projects.push({
+    if (!Array.isArray(targetNode.projects)) {
+      targetNode.projects = [];
+    }
+
+    targetNode.projects.push({
       label,
       path: folderPath
     });
 
-    this.config[categoryName] = categoryNode;
+    const categoryDisplay = this.formatCategoryPath(targetPath);
 
     try {
       await this.saveConfigToDisk();
@@ -271,7 +283,7 @@ export class ProjectTreeDataProvider
       this.setupWatcher();
       this._onDidChangeTreeData.fire();
       vscode.window.showInformationMessage(
-        localize("addProject.success", 'Project "{0}" added to "{1}".', label, categoryName)
+        localize("addProject.success", 'Project "{0}" added to "{1}".', label, categoryDisplay)
       );
     } catch (err) {
       vscode.window.showErrorMessage(
@@ -319,6 +331,44 @@ export class ProjectTreeDataProvider
     }
 
     return this.validationIssues.get(key) ?? [];
+  }
+
+  private collectCategoryNodes(): Array<{ path: string[]; node: CategoryNode }> {
+    const result: Array<{ path: string[]; node: CategoryNode }> = [];
+
+    for (const [name, value] of Object.entries(this.config)) {
+      if (this.isPlainObject(value)) {
+        this.walkCategoryTree(value as CategoryNode, [name], result);
+      }
+    }
+
+    return result;
+  }
+
+  private walkCategoryTree(
+    node: CategoryNode,
+    pathSegments: string[],
+    bucket: Array<{ path: string[]; node: CategoryNode }>
+  ): void {
+    bucket.push({ path: [...pathSegments], node });
+
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "projects") {
+        continue;
+      }
+
+      if (this.isPlainObject(value)) {
+        this.walkCategoryTree(
+          value as CategoryNode,
+          [...pathSegments, key],
+          bucket
+        );
+      }
+    }
+  }
+
+  private formatCategoryPath(pathSegments: string[]): string {
+    return pathSegments.join(" / ");
   }
 
 
