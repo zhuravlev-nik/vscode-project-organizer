@@ -40,4 +40,4 @@ You can open it from the view using **Project Tree: Edit Config**.
 }
 ```
 
-`icon` — необязательное поле. Укажите любой идентификатор Codicon (например, `symbol-method`, `github`, `terminal`). Если поле не задано, будет использована стандартная иконка VS Code.
+`icon` is optional. Provide any [Codicon](https://microsoft.github.io/vscode-codicons/dist/codicon.html) identifier (for example `symbol-method`, `github`, `terminal`). If omitted, VS Code's default project icon is used.

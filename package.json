@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "publisher": "nzhuravlev",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "license": "MIT",
   "engines": {
     "vscode": "^1.107.0"
@@ -40,17 +40,17 @@
     "commands": [
       {
         "command": "projectTree.openConfig",
-          "title": "%commands.editConfig.title%",
+        "title": "%commands.editConfig.title%",
         "icon": "$(pencil)"
       },
       {
         "command": "projectTree.refresh",
-          "title": "%commands.refresh.title%",
+        "title": "%commands.refresh.title%",
         "icon": "$(refresh)"
       },
       {
         "command": "projectTree.openProjectHere",
-          "title": "%commands.openHere.title%",
+        "title": "%commands.openHere.title%",
         "icon": "$(file-code)"
       },
       {

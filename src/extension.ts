@@ -49,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!item || !item.projectPath) return;
 
         const uri = vscode.Uri.file(item.projectPath);
-        await vscode.commands.executeCommand("vscode.openFolder", uri, false); // текущее окно
+        await vscode.commands.executeCommand("vscode.openFolder", uri, false);
       }
     )
   );
@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!item || !item.projectPath) return;
 
         const uri = vscode.Uri.file(item.projectPath);
-        await vscode.commands.executeCommand("vscode.openFolder", uri, true); // новое окно
+        await vscode.commands.executeCommand("vscode.openFolder", uri, true);
       }
     )
   );

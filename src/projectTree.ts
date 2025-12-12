@@ -134,7 +134,6 @@ export class ProjectTreeDataProvider
       return Promise.resolve([]);
     }
 
-    // Корневой уровень: верхние категории из конфига
     if (!element) {
       const items: ProjectTreeItem[] = [];
       for (const [name, node] of Object.entries(this.config)) {
