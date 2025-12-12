@@ -6,5 +6,6 @@
   "commands.editConfig.title": "Изменить конфиг",
   "commands.refresh.title": "Обновить",
   "commands.openHere.title": "Открыть проект (текущее окно)",
-  "commands.openNew.title": "Открыть проект (новое окно)"
+  "commands.openNew.title": "Открыть проект (новое окно)",
+  "commands.addProject.title": "Добавить проект"
 }

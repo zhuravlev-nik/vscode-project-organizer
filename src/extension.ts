@@ -37,6 +37,12 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("projectTree.addProject", async () => {
+      await treeDataProvider?.addProject();
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand(
       "projectTree.openProjectHere",
       async (item: ProjectTreeItem) => {

@@ -19,7 +19,14 @@ const dictionaries: Record<Locale, Messages> = {
     "error.labelRequired": "`label` is required and must be a string.",
     "error.pathRequired": "`path` is required and must be a string.",
     "label.invalidProject": "Invalid project",
-    "label.untitledProject": "Untitled"
+    "label.untitledProject": "Untitled",
+    "addProject.pickFolder": "Select project folder",
+    "addProject.enterLabel": "Enter project name",
+    "addProject.chooseCategory": "Select category",
+    "addProject.newCategory": "Create new category…",
+    "addProject.enterCategory": "Enter new category name",
+    "addProject.success": "Project \"{0}\" added to \"{1}\".",
+    "addProject.saveError": "Failed to save projects.json: {0}"
   },
   ru: {
     "tree.configError": "Ошибка конфигурации",
@@ -34,7 +41,14 @@ const dictionaries: Record<Locale, Messages> = {
     "error.labelRequired": "Поле `label` обязательно и должно быть строкой.",
     "error.pathRequired": "Поле `path` обязательно и должно быть строкой.",
     "label.invalidProject": "Некорректный проект",
-    "label.untitledProject": "Без названия"
+    "label.untitledProject": "Без названия",
+    "addProject.pickFolder": "Выберите папку проекта",
+    "addProject.enterLabel": "Введите название проекта",
+    "addProject.chooseCategory": "Выберите категорию",
+    "addProject.newCategory": "Создать новую категорию…",
+    "addProject.enterCategory": "Введите название категории",
+    "addProject.success": "Проект «{0}» добавлен в «{1}».",
+    "addProject.saveError": "Не удалось сохранить projects.json: {0}"
   }
 };
 
@@ -81,4 +95,3 @@ function format(value: string, args: Array<string | number>): string {
     return arg !== undefined ? String(arg) : match;
   });
 }
-

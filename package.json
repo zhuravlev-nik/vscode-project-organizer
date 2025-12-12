@@ -15,7 +15,8 @@
     "onView:projectTreeView",
     "onCommand:projectTree.openConfig",
     "onCommand:projectTree.refresh",
-    "onCommand:projectTree.openProject"
+    "onCommand:projectTree.openProject",
+    "onCommand:projectTree.addProject"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -54,8 +55,13 @@
       },
       {
         "command": "projectTree.openProject",
-          "title": "%commands.openNew.title%",
+        "title": "%commands.openNew.title%",
         "icon": "$(window)"
+      },
+      {
+        "command": "projectTree.addProject",
+        "title": "%commands.addProject.title%",
+        "icon": "$(add)"
       }
     ],
     "menus": {
@@ -79,6 +85,11 @@
         },
         {
           "command": "projectTree.openConfig",
+          "when": "view == projectTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "projectTree.addProject",
           "when": "view == projectTreeView",
           "group": "navigation"
         }

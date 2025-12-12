@@ -6,6 +6,7 @@ Project Tree shows a custom tree of your local projects in the Activity Bar.
 
 - Project categories and projects are loaded from a JSON config file.
 - Open config directly from the view.
+- Add projects via **Project Tree: Add Project** wizard (select folder, name and category).
 - Refresh the tree.
 - Open a project in the current window or in a new window.
 

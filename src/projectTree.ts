@@ -184,6 +184,106 @@ export class ProjectTreeDataProvider
     this._onDidChangeTreeData.fire();
   }
 
+  async addProject(): Promise<void> {
+    const folder = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: localize("addProject.pickFolder", "Select project folder")
+    });
+
+    if (!folder || folder.length === 0) {
+      return;
+    }
+
+    const folderPath = folder[0].fsPath;
+    const defaultLabel = path.basename(folderPath);
+
+    const labelInput = await vscode.window.showInputBox({
+      prompt: localize("addProject.enterLabel", "Enter project name"),
+      value: defaultLabel,
+      valueSelection: [0, defaultLabel.length]
+    });
+
+    const label = labelInput?.trim();
+    if (!label) {
+      return;
+    }
+
+    this.loadConfig();
+    const categories = Object.keys(this.config);
+    type CategoryPick = vscode.QuickPickItem & { value: string; createNew?: boolean };
+
+    const newCategoryLabel = localize(
+      "addProject.newCategory",
+      "Create new category…"
+    );
+
+    const picks: CategoryPick[] = categories.map((name) => ({
+      label: name,
+      value: name
+    }));
+    picks.push({
+      label: newCategoryLabel,
+      value: "__new__",
+      description: localize("addProject.enterCategory", "Enter new category name"),
+      createNew: true
+    });
+
+    const selected = await vscode.window.showQuickPick(picks, {
+      placeHolder: localize("addProject.chooseCategory", "Select category")
+    });
+
+    if (!selected) {
+      return;
+    }
+
+    let categoryName = selected.value;
+    if (selected.createNew) {
+      const categoryInput = await vscode.window.showInputBox({
+        prompt: localize("addProject.enterCategory", "Enter new category name")
+      });
+      categoryName = categoryInput?.trim() ?? "";
+      if (!categoryName) {
+        return;
+      }
+    }
+
+    const categoryNode =
+      this.config[categoryName] && typeof this.config[categoryName] === "object"
+        ? this.config[categoryName]
+        : {};
+
+    if (!Array.isArray(categoryNode.projects)) {
+      categoryNode.projects = [];
+    }
+
+    categoryNode.projects.push({
+      label,
+      path: folderPath
+    });
+
+    this.config[categoryName] = categoryNode;
+
+    try {
+      await this.saveConfigToDisk();
+      this.loadConfig();
+      this.setupWatcher();
+      this._onDidChangeTreeData.fire();
+      vscode.window.showInformationMessage(
+        localize("addProject.success", 'Project "{0}" added to "{1}".', label, categoryName)
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        localize(
+          "addProject.saveError",
+          "Failed to save projects.json: {0}",
+          (err as Error).message
+        )
+      );
+    }
+  }
+
   dispose(): void {
     if (this.watcher) {
       this.watcher.close();
@@ -253,6 +353,12 @@ export class ProjectTreeDataProvider
     } finally {
       this.handleValidationWarning();
     }
+  }
+
+  private async saveConfigToDisk(): Promise<void> {
+    const configPath = this.getConfigPath();
+    const content = JSON.stringify(this.config, null, 2);
+    await fs.promises.writeFile(configPath, `${content}\n`, "utf8");
   }
 
   private validateAndNormalizeConfig(raw: unknown): RootConfig {
