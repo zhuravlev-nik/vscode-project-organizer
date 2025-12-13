@@ -9,5 +9,8 @@
   "commands.openNew.title": "Открыть проект (новое окно)",
   "commands.addProject.title": "Добавить проект",
   "commands.editProject.title": "Редактировать проект",
-  "commands.removeProject.title": "Удалить проект"
+  "commands.removeProject.title": "Удалить проект",
+  "commands.addCategory.title": "Добавить категорию",
+  "commands.renameCategory.title": "Переименовать категорию",
+  "commands.removeCategory.title": "Удалить категорию"
 }

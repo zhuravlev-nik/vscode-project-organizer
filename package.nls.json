@@ -9,5 +9,8 @@
   "commands.openNew.title": "Open Project (New Window)",
   "commands.addProject.title": "Add Project",
   "commands.editProject.title": "Edit Project",
-  "commands.removeProject.title": "Remove Project"
+  "commands.removeProject.title": "Remove Project",
+  "commands.addCategory.title": "Add Category",
+  "commands.renameCategory.title": "Rename Category",
+  "commands.removeCategory.title": "Remove Category"
 }

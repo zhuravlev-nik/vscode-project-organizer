@@ -8,6 +8,7 @@ Project Tree Organizer shows a custom tree of your local projects in the Activit
 - Open config directly from the view.
 - Add projects via **Project Tree: Add Project** wizard (select folder, name and category). Paths inside `~/` are stored relative to make configs portable.
 - Edit or remove existing projects from the tree (rename, change path/icon, move to another category).
+- Create, rename, move or delete categories directly from the tree (including nested ones).
 - Customize project icons via the optional `icon` field (uses [Codicon IDs](https://microsoft.github.io/vscode-codicons/dist/codicon.html)).
 - Refresh the tree.
 - Open a project in the current window or in a new window.

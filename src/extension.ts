@@ -41,12 +41,38 @@ export function activate(context: vscode.ExtensionContext) {
       await treeDataProvider?.addProject();
     })
   );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "projectTree.addCategory",
+      async (item?: ProjectTreeItem) => {
+        await treeDataProvider?.addCategory(item);
+      }
+    )
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "projectTree.editProject",
       async (item: ProjectTreeItem) => {
         await treeDataProvider?.editProject(item);
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "projectTree.renameCategory",
+      async (item: ProjectTreeItem) => {
+        await treeDataProvider?.renameCategory(item);
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "projectTree.removeCategory",
+      async (item: ProjectTreeItem) => {
+        await treeDataProvider?.removeCategory(item);
       }
     )
   );

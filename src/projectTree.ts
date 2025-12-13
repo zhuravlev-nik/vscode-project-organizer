@@ -43,11 +43,23 @@ type CategorySelection = {
   path: CategoryPath;
 };
 
+type ParentCategoryPickOptions = {
+  placeholder: string;
+  excludePath?: CategoryPath;
+  currentParentPath?: CategoryPath;
+  keepCurrentLabel?: string;
+};
+
 type ProjectReference = {
   categoryNode: CategoryNode;
   categoryPath: CategoryPath;
   index: number;
   project: Project;
+};
+
+type CategoryContainer = {
+  container: RootConfig | CategoryNode;
+  key: string;
 };
 
 const CONFIG_ERROR_DESCRIPTION = localize(
@@ -325,6 +337,76 @@ export class ProjectTreeDataProvider
     }
   }
 
+  async addCategory(item?: ProjectTreeItem): Promise<void> {
+    this.loadConfig();
+    let basePath: CategoryPath;
+
+    if (item && item.nodeType === "category") {
+      basePath = item.categoryPath ?? [item.label];
+    } else {
+      const picked = await this.pickParentCategoryPath({
+        placeholder: localize("addCategory.chooseParent", "Select parent category")
+      });
+      if (picked === undefined) {
+        return;
+      }
+      basePath = picked;
+    }
+
+    const nameInput = await vscode.window.showInputBox({
+      prompt: localize("addCategory.enterName", "Enter category name"),
+      validateInput: (value) =>
+        value.trim()
+          ? undefined
+          : localize("addCategory.nameValidation", "Category name cannot be empty.")
+    });
+
+    if (nameInput === undefined) {
+      return;
+    }
+
+    const newSegments = this.normalizeCategorySegments(nameInput);
+    if (newSegments.length === 0) {
+      vscode.window.showErrorMessage(
+        localize("addCategory.nameValidation", "Category name cannot be empty.")
+      );
+      return;
+    }
+
+    const newPath: CategoryPath = [...basePath, ...newSegments];
+
+    if (this.getCategoryNodeByPath(newPath)) {
+      vscode.window.showErrorMessage(
+        localize(
+          "addCategory.duplicate",
+          'Category "{0}" already exists.',
+          this.formatCategoryPath(newPath)
+        )
+      );
+      return;
+    }
+
+    this.getOrCreateCategoryNode(newPath);
+
+    try {
+      await this.persistChanges(
+        localize(
+          "addCategory.success",
+          'Category "{0}" created.',
+          this.formatCategoryPath(newPath)
+        )
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        localize(
+          "addCategory.saveError",
+          "Failed to add category: {0}",
+          (err as Error).message
+        )
+      );
+    }
+  }
+
   async editProject(item?: ProjectTreeItem): Promise<void> {
     this.loadConfig();
     const reference = this.resolveProjectReference(item);
@@ -424,6 +506,173 @@ export class ProjectTreeDataProvider
         localize(
           "editProject.saveError",
           "Failed to update project: {0}",
+          (err as Error).message
+        )
+      );
+    }
+  }
+
+  async renameCategory(item?: ProjectTreeItem): Promise<void> {
+    this.loadConfig();
+    const categoryPath = this.resolveCategoryPath(item);
+    if (!categoryPath) {
+      return;
+    }
+
+    const currentName = categoryPath[categoryPath.length - 1];
+    const parentPath = categoryPath.slice(0, -1);
+    const input = await vscode.window.showInputBox({
+      prompt: localize("renameCategory.enterName", "Enter new category name"),
+      value: currentName,
+      valueSelection: [0, currentName.length],
+      validateInput: (value) =>
+        value.trim()
+          ? undefined
+          : localize("renameCategory.nameValidation", "Category name cannot be empty.")
+    });
+
+    if (input === undefined) {
+      return;
+    }
+
+    const newName = input.trim();
+    if (!newName) {
+      return;
+    }
+
+    if (newName.includes("/")) {
+      vscode.window.showErrorMessage(
+        localize(
+          "renameCategory.invalidCharacters",
+          "Category name cannot contain '/'."
+        )
+      );
+      return;
+    }
+
+    const keepParentLabel = localize(
+      "renameCategory.keepParent",
+      "Keep current parent ({0})",
+      this.formatCategoryPath(parentPath)
+    );
+
+    const targetParent = await this.pickParentCategoryPath({
+      placeholder: localize(
+        "renameCategory.chooseParent",
+        "Select new parent category"
+      ),
+      excludePath: categoryPath,
+      currentParentPath: parentPath,
+      keepCurrentLabel: keepParentLabel
+    });
+
+    if (!targetParent) {
+      return;
+    }
+
+    const container = this.getCategoryContainer(categoryPath);
+    if (!container) {
+      vscode.window.showErrorMessage(
+        localize("error.categoryMissing", "Category entry could not be found in config.")
+      );
+      return;
+    }
+
+    const targetPath = [...targetParent, newName];
+    const isSameDestination =
+      this.pathsEqual(targetPath, categoryPath);
+    if (!isSameDestination && this.getCategoryNodeByPath(targetPath)) {
+      vscode.window.showErrorMessage(
+        localize(
+          "renameCategory.duplicate",
+          'Category "{0}" already exists.',
+          this.formatCategoryPath(targetPath)
+        )
+      );
+      return;
+    }
+
+    if (
+      isSameDestination &&
+      newName === currentName &&
+      this.pathsEqual(targetParent, parentPath)
+    ) {
+      return;
+    }
+
+    const node = (container.container as Record<string, unknown>)[container.key] as CategoryNode;
+    delete (container.container as Record<string, unknown>)[container.key];
+
+    if (targetParent.length === 0) {
+      this.config[newName] = node;
+    } else {
+      const destination = this.getCategoryNodeByPath(targetParent);
+      if (!destination) {
+        vscode.window.showErrorMessage(
+          localize("error.categoryMissing", "Category entry could not be found in config.")
+        );
+        return;
+      }
+      destination[newName] = node;
+    }
+
+    try {
+      await this.persistChanges(
+        localize(
+          "renameCategory.success",
+          'Category moved to "{0}".',
+          this.formatCategoryPath(targetPath)
+        )
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        localize(
+          "renameCategory.saveError",
+          "Failed to rename category: {0}",
+          (err as Error).message
+        )
+      );
+    }
+  }
+
+  async removeCategory(item?: ProjectTreeItem): Promise<void> {
+    this.loadConfig();
+    const categoryPath = this.resolveCategoryPath(item);
+    if (!categoryPath) {
+      return;
+    }
+
+    const container = this.getCategoryContainer(categoryPath);
+    if (!container) {
+      vscode.window.showErrorMessage(
+        localize("error.categoryMissing", "Category entry could not be found in config.")
+      );
+      return;
+    }
+
+    const label = this.formatCategoryPath(categoryPath);
+    const confirmation = await vscode.window.showWarningMessage(
+      localize("removeCategory.confirm", 'Remove category "{0}" and all nested items?', label),
+      { modal: true },
+      localize("removeCategory.confirmYes", "Remove"),
+      localize("removeCategory.confirmNo", "Cancel")
+    );
+
+    if (confirmation !== localize("removeCategory.confirmYes", "Remove")) {
+      return;
+    }
+
+    delete (container.container as Record<string, unknown>)[container.key];
+
+    try {
+      await this.persistChanges(
+        localize("removeCategory.success", 'Category "{0}" removed.', label)
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        localize(
+          "removeCategory.saveError",
+          "Failed to remove category: {0}",
           (err as Error).message
         )
       );
@@ -579,7 +828,10 @@ export class ProjectTreeDataProvider
     return value.replace(/\\/g, "/");
   }
 
-  private formatCategoryPath(pathSegments: string[]): string {
+  private formatCategoryPath(pathSegments: CategoryPath): string {
+    if (pathSegments.length === 0) {
+      return localize("category.rootLabel", "Top level");
+    }
     return pathSegments.join(" / ");
   }
 
@@ -676,6 +928,136 @@ export class ProjectTreeDataProvider
 
     const node = this.getOrCreateCategoryNode(pathSegments);
     return { node, path: pathSegments };
+  }
+
+  private async pickParentCategoryPath(
+    options: ParentCategoryPickOptions
+  ): Promise<CategoryPath | undefined> {
+    const picks: Array<vscode.QuickPickItem & { path: CategoryPath }> = [];
+
+    if (options.currentParentPath) {
+      picks.push({
+        label:
+          options.keepCurrentLabel ??
+          this.formatCategoryPath(options.currentParentPath),
+        description: localize(
+          "renameCategory.currentParentDescription",
+          "Current parent"
+        ),
+        path: options.currentParentPath
+      });
+    }
+
+    const rootPick = {
+      label: localize("category.rootLabel", "Top level"),
+      description: localize(
+        "category.rootDescription",
+        "Create category at the root"
+      ),
+      path: [] as CategoryPath
+    };
+
+    if (
+      !options.currentParentPath ||
+      options.currentParentPath.length > 0
+    ) {
+      picks.push(rootPick);
+    }
+
+    const categories = this.collectCategoryNodes();
+    for (const category of categories) {
+      if (
+        options.excludePath &&
+        this.isSameOrDescendantPath(category.path, options.excludePath)
+      ) {
+        continue;
+      }
+
+      if (
+        options.currentParentPath &&
+        this.pathsEqual(category.path, options.currentParentPath)
+      ) {
+        continue;
+      }
+
+      picks.push({
+        label: this.formatCategoryPath(category.path),
+        path: category.path
+      });
+    }
+
+    if (picks.length === 0) {
+      return undefined;
+    }
+
+    const selection = await vscode.window.showQuickPick(picks, {
+      placeHolder: options.placeholder
+    });
+
+    if (!selection) {
+      return undefined;
+    }
+
+    return selection.path;
+  }
+
+  private normalizeCategorySegments(value: string): string[] {
+    return value
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+  }
+
+  private resolveCategoryPath(item?: ProjectTreeItem): CategoryPath | undefined {
+    if (!item || item.nodeType !== "category") {
+      vscode.window.showWarningMessage(
+        localize(
+          "category.selectCategory",
+          "Select a category in the Project Tree first."
+        )
+      );
+      return undefined;
+    }
+
+    if (item.categoryPath && item.categoryPath.length > 0) {
+      return item.categoryPath;
+    }
+
+    if (item.label) {
+      return [item.label];
+    }
+
+    return undefined;
+  }
+
+  private getCategoryContainer(path: CategoryPath): CategoryContainer | undefined {
+    if (path.length === 0) {
+      return undefined;
+    }
+
+    if (path.length === 1) {
+      const key = path[0];
+      if (!this.isPlainObject(this.config[key])) {
+        return undefined;
+      }
+      return { container: this.config, key };
+    }
+
+    const parentPath = path.slice(0, -1);
+    const parentNode = this.getCategoryNodeByPath(parentPath);
+    if (!parentNode) {
+      return undefined;
+    }
+
+    const key = path[path.length - 1];
+    if (!this.isPlainObject(parentNode[key])) {
+      return undefined;
+    }
+
+    return {
+      container: parentNode,
+      key
+    };
   }
 
   private loadConfig(): void {
@@ -1025,6 +1407,21 @@ export class ProjectTreeDataProvider
     }
 
     return a.every((segment, index) => segment === b[index]);
+  }
+
+  private isSameOrDescendantPath(
+    path: CategoryPath,
+    ancestor: CategoryPath
+  ): boolean {
+    if (ancestor.length === 0) {
+      return false;
+    }
+
+    if (path.length < ancestor.length) {
+      return false;
+    }
+
+    return ancestor.every((segment, index) => path[index] === segment);
   }
 
   private normalizePathInput(value: string): string {

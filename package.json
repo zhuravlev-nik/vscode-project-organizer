@@ -18,7 +18,10 @@
     "onCommand:projectTree.openProject",
     "onCommand:projectTree.addProject",
     "onCommand:projectTree.editProject",
-    "onCommand:projectTree.removeProject"
+    "onCommand:projectTree.removeProject",
+    "onCommand:projectTree.addCategory",
+    "onCommand:projectTree.renameCategory",
+    "onCommand:projectTree.removeCategory"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -63,7 +66,7 @@
       {
         "command": "projectTree.addProject",
         "title": "%commands.addProject.title%",
-        "icon": "$(add)"
+        "icon": "$(new-file)"
       },
       {
         "command": "projectTree.editProject",
@@ -73,6 +76,21 @@
       {
         "command": "projectTree.removeProject",
         "title": "%commands.removeProject.title%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "projectTree.addCategory",
+        "title": "%commands.addCategory.title%",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "projectTree.renameCategory",
+        "title": "%commands.renameCategory.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "projectTree.removeCategory",
+        "title": "%commands.removeCategory.title%",
         "icon": "$(trash)"
       }
     ],
@@ -97,9 +115,39 @@
           "command": "projectTree.removeProject",
           "when": "view == projectTreeView && viewItem == projectTree.project",
           "group": "inline@4"
+        },
+        {
+          "command": "projectTree.addProject",
+          "when": "view == projectTreeView && viewItem == projectTree.category",
+          "group": "inline@1"
+        },
+        {
+          "command": "projectTree.addCategory",
+          "when": "view == projectTreeView && viewItem == projectTree.category",
+          "group": "inline@2"
+        },
+        {
+          "command": "projectTree.renameCategory",
+          "when": "view == projectTreeView && viewItem == projectTree.category",
+          "group": "inline@3"
+        },
+        {
+          "command": "projectTree.removeCategory",
+          "when": "view == projectTreeView && viewItem == projectTree.category",
+          "group": "inline@4"
         }
       ],
       "view/title": [
+        {
+          "command": "projectTree.addProject",
+          "when": "view == projectTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "projectTree.addCategory",
+          "when": "view == projectTreeView",
+          "group": "navigation"
+        },
         {
           "command": "projectTree.refresh",
           "when": "view == projectTreeView",
@@ -107,11 +155,6 @@
         },
         {
           "command": "projectTree.openConfig",
-          "when": "view == projectTreeView",
-          "group": "navigation"
-        },
-        {
-          "command": "projectTree.addProject",
           "when": "view == projectTreeView",
           "group": "navigation"
         }
