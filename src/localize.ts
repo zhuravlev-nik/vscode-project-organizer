@@ -29,7 +29,24 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.success": "Project \"{0}\" added to \"{1}\".",
     "addProject.saveError": "Failed to save projects.json: {0}",
     "project.tooltip.originalPath": "Config path: {0}",
-    "project.tooltip.resolvedPath": "Resolved path: {0}"
+    "project.tooltip.resolvedPath": "Resolved path: {0}",
+    "editProject.enterLabel": "Update project name",
+    "editProject.labelValidation": "Project name cannot be empty.",
+    "editProject.enterPath": "Update project path",
+    "editProject.pathValidation": "Project path cannot be empty.",
+    "editProject.enterIcon": "Enter codicon id (optional, leave empty to clear)",
+    "editProject.keepCategory": "Keep current category ({0})",
+    "editProject.chooseCategory": "Select target category",
+    "editProject.currentCategoryDescription": "Current category",
+    "editProject.success": "Project \"{0}\" updated.",
+    "editProject.saveError": "Failed to update project: {0}",
+    "removeProject.confirm": "Remove project \"{0}\" from \"{1}\"?",
+    "removeProject.confirmYes": "Remove",
+    "removeProject.confirmNo": "Cancel",
+    "removeProject.success": "Project \"{0}\" removed.",
+    "removeProject.saveError": "Failed to remove project: {0}",
+    "project.selectProject": "Select a project in the Project Tree first.",
+    "error.projectMissing": "Project entry could not be found in config."
   },
   ru: {
     "tree.configError": "Ошибка конфигурации",
@@ -54,7 +71,24 @@ const dictionaries: Record<Locale, Messages> = {
     "addProject.success": "Проект «{0}» добавлен в «{1}».",
     "addProject.saveError": "Не удалось сохранить projects.json: {0}",
     "project.tooltip.originalPath": "Путь в конфиге: {0}",
-    "project.tooltip.resolvedPath": "Абсолютный путь: {0}"
+    "project.tooltip.resolvedPath": "Абсолютный путь: {0}",
+    "editProject.enterLabel": "Измените название проекта",
+    "editProject.labelValidation": "Название проекта не может быть пустым.",
+    "editProject.enterPath": "Измените путь проекта",
+    "editProject.pathValidation": "Путь проекта не может быть пустым.",
+    "editProject.enterIcon": "Укажите codicon (опционально, оставьте пустым чтобы очистить)",
+    "editProject.keepCategory": "Оставить категорию «{0}»",
+    "editProject.chooseCategory": "Выберите категорию",
+    "editProject.currentCategoryDescription": "Текущая категория",
+    "editProject.success": "Проект «{0}» обновлён.",
+    "editProject.saveError": "Не удалось обновить проект: {0}",
+    "removeProject.confirm": "Удалить проект «{0}» из «{1}»?",
+    "removeProject.confirmYes": "Удалить",
+    "removeProject.confirmNo": "Отмена",
+    "removeProject.success": "Проект «{0}» удалён.",
+    "removeProject.saveError": "Не удалось удалить проект: {0}",
+    "project.selectProject": "Сначала выберите проект в дереве.",
+    "error.projectMissing": "Не удалось найти проект в конфиге."
   }
 };
 

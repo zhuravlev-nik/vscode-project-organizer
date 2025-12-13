@@ -1,5 +1,5 @@
 {
-  "extension.displayName": "Project Tree",
+  "extension.displayName": "Project Tree Organizer",
   "extension.description": "Show a custom tree of your local projects in the Activity Bar.",
   "viewsContainers.projectTree.title": "Project Tree",
   "views.projectTree.name": "Project Tree",
@@ -7,5 +7,7 @@
   "commands.refresh.title": "Refresh",
   "commands.openHere.title": "Open Project (Current Window)",
   "commands.openNew.title": "Open Project (New Window)",
-  "commands.addProject.title": "Add Project"
+  "commands.addProject.title": "Add Project",
+  "commands.editProject.title": "Edit Project",
+  "commands.removeProject.title": "Remove Project"
 }

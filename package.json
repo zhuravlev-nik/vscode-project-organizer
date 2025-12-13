@@ -16,7 +16,9 @@
     "onCommand:projectTree.openConfig",
     "onCommand:projectTree.refresh",
     "onCommand:projectTree.openProject",
-    "onCommand:projectTree.addProject"
+    "onCommand:projectTree.addProject",
+    "onCommand:projectTree.editProject",
+    "onCommand:projectTree.removeProject"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -62,6 +64,16 @@
         "command": "projectTree.addProject",
         "title": "%commands.addProject.title%",
         "icon": "$(add)"
+      },
+      {
+        "command": "projectTree.editProject",
+        "title": "%commands.editProject.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "projectTree.removeProject",
+        "title": "%commands.removeProject.title%",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -75,6 +87,16 @@
           "command": "projectTree.openProject",
           "when": "view == projectTreeView && viewItem == projectTree.project",
           "group": "inline@2"
+        },
+        {
+          "command": "projectTree.editProject",
+          "when": "view == projectTreeView && viewItem == projectTree.project",
+          "group": "inline@3"
+        },
+        {
+          "command": "projectTree.removeProject",
+          "when": "view == projectTreeView && viewItem == projectTree.project",
+          "group": "inline@4"
         }
       ],
       "view/title": [

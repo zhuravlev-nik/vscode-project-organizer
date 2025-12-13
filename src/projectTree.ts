@@ -22,6 +22,34 @@ export type RootConfig = {
 
 export type NodeType = "category" | "project";
 
+type CategoryPath = string[];
+
+type CategoryPick = vscode.QuickPickItem & {
+  pathSegments?: CategoryPath;
+  node?: CategoryNode;
+  createNew?: boolean;
+};
+
+type CategoryPickOptions = {
+  placeholder: string;
+  allowCreate?: boolean;
+  currentPath?: CategoryPath;
+  includeKeepCurrent?: boolean;
+  keepCurrentLabel?: string;
+};
+
+type CategorySelection = {
+  node: CategoryNode;
+  path: CategoryPath;
+};
+
+type ProjectReference = {
+  categoryNode: CategoryNode;
+  categoryPath: CategoryPath;
+  index: number;
+  project: Project;
+};
+
 const CONFIG_ERROR_DESCRIPTION = localize(
   "tree.configError",
   "Config error"
@@ -37,7 +65,10 @@ export class ProjectTreeItem extends vscode.TreeItem {
     public readonly iconId?: string,
     public readonly categoryNode?: CategoryNode,
     public readonly configPath?: string,
-    public readonly errors: string[] = []
+    public readonly errors: string[] = [],
+    public readonly categoryPath?: CategoryPath,
+    public readonly project?: Project,
+    public readonly projectIndex?: number
   ) {
     super(label, collapsibleState);
     const hasErrors = errors.length > 0;
@@ -138,6 +169,7 @@ export class ProjectTreeDataProvider
       const items: ProjectTreeItem[] = [];
       for (const [name, node] of Object.entries(this.config)) {
         const configPath = name;
+        const categoryPath: CategoryPath = [name];
         const categoryItem = new ProjectTreeItem(
           name,
           vscode.TreeItemCollapsibleState.Collapsed,
@@ -147,7 +179,8 @@ export class ProjectTreeDataProvider
           undefined,
           node,
           configPath,
-          this.getIssuesForKey(configPath)
+          this.getIssuesForKey(configPath),
+          categoryPath
         );
 
         items.push(categoryItem);
@@ -158,6 +191,9 @@ export class ProjectTreeDataProvider
     if (element.nodeType === "category" && element.categoryNode) {
       const node = element.categoryNode;
       const items: ProjectTreeItem[] = [];
+
+      const currentCategoryPath =
+        element.categoryPath ?? [element.label];
 
       if (Array.isArray(node.projects)) {
         node.projects.forEach((proj, index) => {
@@ -176,7 +212,10 @@ export class ProjectTreeDataProvider
               this.getProjectIconId(proj),
               undefined,
               projectKey,
-              this.getIssuesForKey(projectKey)
+              this.getIssuesForKey(projectKey),
+              currentCategoryPath,
+              proj,
+              index
             )
           );
         });
@@ -189,6 +228,10 @@ export class ProjectTreeDataProvider
             element.configPath ?? element.label,
             key
           );
+          const childSegments: CategoryPath = [
+            ...currentCategoryPath,
+            key
+          ];
           items.push(
             new ProjectTreeItem(
               key,
@@ -199,7 +242,8 @@ export class ProjectTreeDataProvider
               undefined,
               value as CategoryNode,
               childPath,
-              this.getIssuesForKey(childPath)
+              this.getIssuesForKey(childPath),
+              childSegments
             )
           );
         }
@@ -243,60 +287,17 @@ export class ProjectTreeDataProvider
     }
 
     this.loadConfig();
-    type CategoryPick = vscode.QuickPickItem & {
-      pathSegments?: string[];
-      node?: CategoryNode;
-      createNew?: boolean;
-    };
-
-    const categoryNodes = this.collectCategoryNodes();
-    const newCategoryLabel = localize(
-      "addProject.newCategory",
-      "Create new category…"
-    );
-
-    const picks: CategoryPick[] = categoryNodes.map((category) => ({
-      label: this.formatCategoryPath(category.path),
-      pathSegments: category.path,
-      node: category.node
-    }));
-
-    picks.push({
-      label: newCategoryLabel,
-      description: localize("addProject.enterCategory", "Enter new category name"),
-      createNew: true
+    const categorySelection = await this.pickCategory({
+      placeholder: localize("addProject.chooseCategory", "Select category"),
+      allowCreate: true
     });
 
-    const selected = await vscode.window.showQuickPick(picks, {
-      placeHolder: localize("addProject.chooseCategory", "Select category")
-    });
-
-    if (!selected) {
+    if (!categorySelection) {
       return;
     }
 
-    let targetNode: CategoryNode | undefined = selected.node;
-    let targetPath = selected.pathSegments ?? [];
-
-    if (selected.createNew) {
-      const categoryInput = await vscode.window.showInputBox({
-        prompt: localize("addProject.enterCategory", "Enter new category name")
-      });
-      const categoryName = categoryInput?.trim();
-      if (!categoryName) {
-        return;
-      }
-      targetPath = [categoryName];
-      targetNode =
-        this.config[categoryName] && typeof this.config[categoryName] === "object"
-          ? this.config[categoryName]
-          : {};
-      this.config[categoryName] = targetNode;
-    }
-
-    if (!targetNode) {
-      return;
-    }
+    const targetNode = categorySelection.node;
+    const targetPath = categorySelection.path;
 
     if (!Array.isArray(targetNode.projects)) {
       targetNode.projects = [];
@@ -310,11 +311,7 @@ export class ProjectTreeDataProvider
     const categoryDisplay = this.formatCategoryPath(targetPath);
 
     try {
-      await this.saveConfigToDisk();
-      this.loadConfig();
-      this.setupWatcher();
-      this._onDidChangeTreeData.fire();
-      vscode.window.showInformationMessage(
+      await this.persistChanges(
         localize("addProject.success", 'Project "{0}" added to "{1}".', label, categoryDisplay)
       );
     } catch (err) {
@@ -322,6 +319,155 @@ export class ProjectTreeDataProvider
         localize(
           "addProject.saveError",
           "Failed to save projects.json: {0}",
+          (err as Error).message
+        )
+      );
+    }
+  }
+
+  async editProject(item?: ProjectTreeItem): Promise<void> {
+    this.loadConfig();
+    const reference = this.resolveProjectReference(item);
+    if (!reference) {
+      return;
+    }
+
+    const { project } = reference;
+
+    const labelInput = await vscode.window.showInputBox({
+      prompt: localize("editProject.enterLabel", "Update project name"),
+      value: project.label,
+      valueSelection: [0, project.label.length],
+      validateInput: (value) =>
+        value.trim()
+          ? undefined
+          : localize("editProject.labelValidation", "Project name cannot be empty.")
+    });
+
+    if (labelInput === undefined) {
+      return;
+    }
+
+    const pathInput = await vscode.window.showInputBox({
+      prompt: localize("editProject.enterPath", "Update project path"),
+      value: project.path,
+      validateInput: (value) =>
+        value.trim()
+          ? undefined
+          : localize("editProject.pathValidation", "Project path cannot be empty.")
+    });
+
+    if (pathInput === undefined) {
+      return;
+    }
+
+    const iconInput = await vscode.window.showInputBox({
+      prompt: localize(
+        "editProject.enterIcon",
+        "Enter codicon id (optional, leave empty to clear)"
+      ),
+      value: project.icon ?? ""
+    });
+
+    if (iconInput === undefined) {
+      return;
+    }
+
+    const keepLabel = localize(
+      "editProject.keepCategory",
+      "Keep current category ({0})",
+      this.formatCategoryPath(reference.categoryPath)
+    );
+
+    const targetCategory = await this.pickCategory({
+      placeholder: localize("editProject.chooseCategory", "Select target category"),
+      allowCreate: true,
+      currentPath: reference.categoryPath,
+      includeKeepCurrent: true,
+      keepCurrentLabel: keepLabel
+    });
+
+    if (!targetCategory) {
+      return;
+    }
+
+    const normalizedPath = this.normalizePathInput(pathInput);
+    const normalizedIcon = iconInput.trim() ? iconInput.trim() : undefined;
+    const updatedProject: Project = {
+      label: labelInput.trim(),
+      path: normalizedPath,
+      icon: normalizedIcon
+    };
+
+    if (
+      this.pathsEqual(reference.categoryPath, targetCategory.path)
+    ) {
+      if (Array.isArray(reference.categoryNode.projects)) {
+        reference.categoryNode.projects[reference.index] = updatedProject;
+      }
+    } else {
+      if (Array.isArray(reference.categoryNode.projects)) {
+        reference.categoryNode.projects.splice(reference.index, 1);
+      }
+      if (!Array.isArray(targetCategory.node.projects)) {
+        targetCategory.node.projects = [];
+      }
+      targetCategory.node.projects.push(updatedProject);
+    }
+
+    try {
+      await this.persistChanges(
+        localize("editProject.success", 'Project "{0}" updated.', updatedProject.label)
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        localize(
+          "editProject.saveError",
+          "Failed to update project: {0}",
+          (err as Error).message
+        )
+      );
+    }
+  }
+
+  async removeProject(item?: ProjectTreeItem): Promise<void> {
+    this.loadConfig();
+    const reference = this.resolveProjectReference(item);
+    if (!reference || !Array.isArray(reference.categoryNode.projects)) {
+      return;
+    }
+
+    const categoryLabel = this.formatCategoryPath(reference.categoryPath);
+    const confirmation = await vscode.window.showWarningMessage(
+      localize(
+        "removeProject.confirm",
+        'Remove project "{0}" from "{1}"?',
+        reference.project.label,
+        categoryLabel
+      ),
+      { modal: true },
+      localize("removeProject.confirmYes", "Remove"),
+      localize("removeProject.confirmNo", "Cancel")
+    );
+
+    if (confirmation !== localize("removeProject.confirmYes", "Remove")) {
+      return;
+    }
+
+    reference.categoryNode.projects.splice(reference.index, 1);
+    if (reference.categoryNode.projects.length === 0) {
+      delete reference.categoryNode.projects;
+    }
+
+    try {
+      await this.persistChanges(
+        localize("removeProject.success", 'Project "{0}" removed.', reference.project.label)
+      );
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        localize(
+          "removeProject.saveError",
+          "Failed to remove project: {0}",
           (err as Error).message
         )
       );
@@ -433,44 +579,104 @@ export class ProjectTreeDataProvider
     return value.replace(/\\/g, "/");
   }
 
-  private collectCategoryNodes(): Array<{ path: string[]; node: CategoryNode }> {
-    const result: Array<{ path: string[]; node: CategoryNode }> = [];
-
-    for (const [name, value] of Object.entries(this.config)) {
-      if (this.isPlainObject(value)) {
-        this.walkCategoryTree(value as CategoryNode, [name], result);
-      }
-    }
-
-    return result;
-  }
-
-  private walkCategoryTree(
-    node: CategoryNode,
-    pathSegments: string[],
-    bucket: Array<{ path: string[]; node: CategoryNode }>
-  ): void {
-    bucket.push({ path: [...pathSegments], node });
-
-    for (const [key, value] of Object.entries(node)) {
-      if (key === "projects") {
-        continue;
-      }
-
-      if (this.isPlainObject(value)) {
-        this.walkCategoryTree(
-          value as CategoryNode,
-          [...pathSegments, key],
-          bucket
-        );
-      }
-    }
-  }
-
   private formatCategoryPath(pathSegments: string[]): string {
     return pathSegments.join(" / ");
   }
 
+  private async pickCategory(
+    options: CategoryPickOptions
+  ): Promise<CategorySelection | undefined> {
+    const picks: CategoryPick[] = [];
+    const categories = this.collectCategoryNodes();
+
+    if (
+      options.includeKeepCurrent &&
+      options.currentPath
+    ) {
+      const currentNode = this.getCategoryNodeByPath(options.currentPath);
+      if (currentNode) {
+        picks.push({
+          label:
+            options.keepCurrentLabel ??
+            this.formatCategoryPath(options.currentPath),
+          description: localize("editProject.currentCategoryDescription", "Current category"),
+          pathSegments: options.currentPath,
+          node: currentNode
+        });
+      }
+    }
+
+    for (const category of categories) {
+      if (
+        options.includeKeepCurrent &&
+        options.currentPath &&
+        this.pathsEqual(category.path, options.currentPath)
+      ) {
+        continue;
+      }
+      picks.push({
+        label: this.formatCategoryPath(category.path),
+        pathSegments: category.path,
+        node: category.node
+      });
+    }
+
+    if (options.allowCreate) {
+      picks.push({
+        label: localize("addProject.newCategory", "Create new category…"),
+        description: localize("addProject.enterCategory", "Enter new category name"),
+        createNew: true
+      });
+    }
+
+    if (picks.length === 0) {
+      return undefined;
+    }
+
+    const selection = await vscode.window.showQuickPick(picks, {
+      placeHolder: options.placeholder
+    });
+
+    if (!selection) {
+      return undefined;
+    }
+
+    if (selection.createNew) {
+      return this.promptForNewCategory();
+    }
+
+    if (!selection.node || !selection.pathSegments) {
+      return undefined;
+    }
+
+    return {
+      node: selection.node,
+      path: selection.pathSegments
+    };
+  }
+
+  private async promptForNewCategory(): Promise<CategorySelection | undefined> {
+    const categoryInput = await vscode.window.showInputBox({
+      prompt: localize("addProject.enterCategory", "Enter new category name")
+    });
+
+    const trimmed = categoryInput?.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const pathSegments = trimmed
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+
+    if (pathSegments.length === 0) {
+      return undefined;
+    }
+
+    const node = this.getOrCreateCategoryNode(pathSegments);
+    return { node, path: pathSegments };
+  }
 
   private loadConfig(): void {
     const configPath = this.getConfigPath();
@@ -506,6 +712,39 @@ export class ProjectTreeDataProvider
     }
   }
 
+  private collectCategoryNodes(): Array<{ path: CategoryPath; node: CategoryNode }> {
+    const result: Array<{ path: CategoryPath; node: CategoryNode }> = [];
+
+    for (const [name, value] of Object.entries(this.config)) {
+      if (this.isPlainObject(value)) {
+        this.walkCategoryTree(value as CategoryNode, [name], result);
+      }
+    }
+
+    return result;
+  }
+
+  private walkCategoryTree(
+    node: CategoryNode,
+    pathSegments: CategoryPath,
+    bucket: Array<{ path: CategoryPath; node: CategoryNode }>
+  ): void {
+    bucket.push({ path: [...pathSegments], node });
+
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "projects") {
+        continue;
+      }
+
+      if (this.isPlainObject(value)) {
+        this.walkCategoryTree(
+          value as CategoryNode,
+          [...pathSegments, key],
+          bucket
+        );
+      }
+    }
+  }
   private async saveConfigToDisk(): Promise<void> {
     const configPath = this.getConfigPath();
     const content = JSON.stringify(this.config, null, 2);
@@ -648,6 +887,173 @@ export class ProjectTreeDataProvider
           : "",
       icon: resolvedIcon
     };
+  }
+
+  private getCategoryNodeByPath(pathSegments?: CategoryPath): CategoryNode | undefined {
+    if (!pathSegments || pathSegments.length === 0) {
+      return undefined;
+    }
+
+    const [first, ...rest] = pathSegments;
+    const rootValue = this.config[first];
+    if (!this.isPlainObject(rootValue)) {
+      return undefined;
+    }
+
+    let current: CategoryNode = rootValue as CategoryNode;
+    for (const segment of rest) {
+      const next = current[segment];
+      if (!this.isPlainObject(next)) {
+        return undefined;
+      }
+      current = next as CategoryNode;
+    }
+
+    return current;
+  }
+
+  private getOrCreateCategoryNode(pathSegments: CategoryPath): CategoryNode {
+    if (pathSegments.length === 0) {
+      throw new Error("Category path cannot be empty");
+    }
+
+    const [first, ...rest] = pathSegments;
+    let current: CategoryNode;
+
+    if (this.isPlainObject(this.config[first])) {
+      current = this.config[first];
+    } else {
+      current = {};
+      this.config[first] = current;
+    }
+
+    for (const segment of rest) {
+      const existing = current[segment];
+      if (this.isPlainObject(existing)) {
+        current = existing as CategoryNode;
+      } else {
+        const newNode: CategoryNode = {};
+        current[segment] = newNode;
+        current = newNode;
+      }
+    }
+
+    return current;
+  }
+
+  private resolveProjectReference(
+    item: ProjectTreeItem | undefined
+  ): ProjectReference | undefined {
+    if (!item || item.nodeType !== "project") {
+      vscode.window.showWarningMessage(
+        localize("project.selectProject", "Select a project in the Project Tree first.")
+      );
+      return undefined;
+    }
+
+    const parsed = this.parseProjectConfigPath(item.configPath);
+    const categoryPath = parsed?.path ?? item.categoryPath;
+    const index = parsed?.index ?? item.projectIndex;
+
+    if (!categoryPath || index === undefined) {
+      vscode.window.showErrorMessage(
+        localize("error.projectMissing", "Project entry could not be found in config.")
+      );
+      return undefined;
+    }
+
+    const targetNode = this.getCategoryNodeByPath(categoryPath);
+    if (!targetNode || !Array.isArray(targetNode.projects)) {
+      vscode.window.showErrorMessage(
+        localize("error.projectMissing", "Project entry could not be found in config.")
+      );
+      return undefined;
+    }
+
+    if (index < 0 || index >= targetNode.projects.length) {
+      vscode.window.showErrorMessage(
+        localize("error.projectMissing", "Project entry could not be found in config.")
+      );
+      return undefined;
+    }
+
+    return {
+      categoryNode: targetNode,
+      categoryPath,
+      index,
+      project: targetNode.projects[index]
+    };
+  }
+
+  private parseProjectConfigPath(
+    configPath: string | undefined
+  ): { path: CategoryPath; index: number } | undefined {
+    if (!configPath) {
+      return undefined;
+    }
+
+    const match = /(.*)\.projects\[(\d+)\]$/.exec(configPath);
+    if (!match) {
+      return undefined;
+    }
+
+    const [, categoryPart, indexPart] = match;
+    const index = Number(indexPart);
+    if (Number.isNaN(index)) {
+      return undefined;
+    }
+
+    const pathSegments = categoryPart
+      .split(".")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+
+    if (pathSegments.length === 0) {
+      return undefined;
+    }
+
+    return { path: pathSegments, index };
+  }
+
+  private pathsEqual(a?: CategoryPath, b?: CategoryPath): boolean {
+    if (!a || !b) {
+      return false;
+    }
+
+    if (a.length !== b.length) {
+      return false;
+    }
+
+    return a.every((segment, index) => segment === b[index]);
+  }
+
+  private normalizePathInput(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    if (trimmed.startsWith("~")) {
+      const remainder = trimmed.slice(1).replace(/^[\\/]/, "");
+      const absolute = path.join(os.homedir(), remainder);
+      return this.formatPathForConfig(absolute);
+    }
+
+    if (path.isAbsolute(trimmed)) {
+      return this.formatPathForConfig(trimmed);
+    }
+
+    return this.toPosixPath(trimmed);
+  }
+
+  private async persistChanges(successMessage?: string): Promise<void> {
+    await this.saveConfigToDisk();
+    this.loadConfig();
+    this.setupWatcher();
+    this._onDidChangeTreeData.fire();
+    if (successMessage) {
+      vscode.window.showInformationMessage(successMessage);
+    }
   }
 
   private handleValidationWarning(): void {

@@ -44,6 +44,24 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
+      "projectTree.editProject",
+      async (item: ProjectTreeItem) => {
+        await treeDataProvider?.editProject(item);
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "projectTree.removeProject",
+      async (item: ProjectTreeItem) => {
+        await treeDataProvider?.removeProject(item);
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
       "projectTree.openProjectHere",
       async (item: ProjectTreeItem) => {
         if (!item || !item.projectPath) return;

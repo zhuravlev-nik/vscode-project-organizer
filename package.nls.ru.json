@@ -1,5 +1,5 @@
 {
-  "extension.displayName": "Дерево проектов",
+  "extension.displayName": "Органайзер проектов",
   "extension.description": "Отображает в боковой панели VS Code дерево ваших локальных проектов.",
   "viewsContainers.projectTree.title": "Дерево проектов",
   "views.projectTree.name": "Дерево проектов",
@@ -7,5 +7,7 @@
   "commands.refresh.title": "Обновить",
   "commands.openHere.title": "Открыть проект (текущее окно)",
   "commands.openNew.title": "Открыть проект (новое окно)",
-  "commands.addProject.title": "Добавить проект"
+  "commands.addProject.title": "Добавить проект",
+  "commands.editProject.title": "Редактировать проект",
+  "commands.removeProject.title": "Удалить проект"
 }
