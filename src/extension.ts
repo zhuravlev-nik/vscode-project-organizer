@@ -37,15 +37,26 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("projectTree.addProject", async () => {
-      await treeDataProvider?.addProject();
-    })
+    vscode.commands.registerCommand(
+      "projectTree.addProject",
+      async (item?: ProjectTreeItem) => {
+        await treeDataProvider?.addProject(item);
+      }
+    )
   );
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "projectTree.addCategory",
       async (item?: ProjectTreeItem) => {
         await treeDataProvider?.addCategory(item);
+      }
+    )
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "projectTree.addRootCategory",
+      async () => {
+        await treeDataProvider?.addCategory(undefined, { forceRoot: true });
       }
     )
   );

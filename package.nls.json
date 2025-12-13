@@ -11,6 +11,7 @@
   "commands.editProject.title": "Edit Project",
   "commands.removeProject.title": "Remove Project",
   "commands.addCategory.title": "Add Category",
+  "commands.addRootCategory.title": "Add Root Category",
   "commands.renameCategory.title": "Rename Category",
   "commands.removeCategory.title": "Remove Category"
 }

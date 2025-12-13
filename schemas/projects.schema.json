@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nzhuravlev.github.io/vcode-project-tree/projects.schema.json",
+  "title": "Project Tree Organizer Config",
+  "description": "Defines categories and projects for the Project Tree Organizer extension.",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/definitions/category"
+  },
+  "properties": {
+    "projects": {
+      "description": "Projects that appear on the top level of the tree.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/project"
+      }
+    }
+  },
+  "definitions": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "path"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name for the project."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "File system path to the project folder. Supports ~/ and relative paths."
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional Codicon ID that overrides the project icon."
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "properties": {
+        "projects": {
+          "description": "Projects that belong to this category.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/project"
+          }
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/category"
+      }
+    }
+  }
+}

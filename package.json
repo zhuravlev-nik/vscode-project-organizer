@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "publisher": "nzhuravlev",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "engines": {
     "vscode": "^1.107.0"
@@ -20,6 +20,7 @@
     "onCommand:projectTree.editProject",
     "onCommand:projectTree.removeProject",
     "onCommand:projectTree.addCategory",
+    "onCommand:projectTree.addRootCategory",
     "onCommand:projectTree.renameCategory",
     "onCommand:projectTree.removeCategory"
   ],
@@ -69,6 +70,11 @@
         "icon": "$(new-file)"
       },
       {
+        "command": "projectTree.addRootCategory",
+        "title": "%commands.addRootCategory.title%",
+        "icon": "$(new-folder)"
+      },
+      {
         "command": "projectTree.editProject",
         "title": "%commands.editProject.title%",
         "icon": "$(edit)"
@@ -116,11 +122,11 @@
           "when": "view == projectTreeView && viewItem == projectTree.project",
           "group": "inline@4"
         },
-        {
-          "command": "projectTree.addProject",
-          "when": "view == projectTreeView && viewItem == projectTree.category",
-          "group": "inline@1"
-        },
+      {
+        "command": "projectTree.addProject",
+        "when": "view == projectTreeView && viewItem == projectTree.category",
+        "group": "inline@1"
+      },
         {
           "command": "projectTree.addCategory",
           "when": "view == projectTreeView && viewItem == projectTree.category",
@@ -144,7 +150,7 @@
           "group": "navigation"
         },
         {
-          "command": "projectTree.addCategory",
+          "command": "projectTree.addRootCategory",
           "when": "view == projectTreeView",
           "group": "navigation"
         },
@@ -159,7 +165,15 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": [
+          "**/nzhuravlev.vcode-project-tree/projects.json"
+        ],
+        "url": "./schemas/projects.schema.json"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

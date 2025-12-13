@@ -16,9 +16,7 @@ export interface CategoryNode {
   [key: string]: any;
 }
 
-export type RootConfig = {
-  [categoryName: string]: CategoryNode;
-};
+export type RootConfig = CategoryNode;
 
 export type NodeType = "category" | "project";
 
@@ -36,6 +34,9 @@ type CategoryPickOptions = {
   currentPath?: CategoryPath;
   includeKeepCurrent?: boolean;
   keepCurrentLabel?: string;
+  includeRootOption?: boolean;
+  rootLabel?: string;
+  rootDescription?: string;
 };
 
 type CategorySelection = {
@@ -142,6 +143,8 @@ export class ProjectTreeDataProvider
 
   private config: RootConfig = {};
   private watcher?: fs.FSWatcher;
+  private watcherDebounce?: NodeJS.Timeout;
+  private watcherRetryTimeout?: NodeJS.Timeout;
   private validationIssues: Map<string, string[]> = new Map();
   private hadValidationErrors = false;
   private resolvedPathCache: WeakMap<Project, string> = new WeakMap();
@@ -180,6 +183,12 @@ export class ProjectTreeDataProvider
     if (!element) {
       const items: ProjectTreeItem[] = [];
       for (const [name, node] of Object.entries(this.config)) {
+        if (name === "projects") {
+          continue;
+        }
+        if (!this.isPlainObject(node)) {
+          continue;
+        }
         const configPath = name;
         const categoryPath: CategoryPath = [name];
         const categoryItem = new ProjectTreeItem(
@@ -196,6 +205,30 @@ export class ProjectTreeDataProvider
         );
 
         items.push(categoryItem);
+      }
+
+      const rootProjects = this.config.projects;
+      if (Array.isArray(rootProjects)) {
+        rootProjects.forEach((proj, index) => {
+          const projectKey = this.buildProjectKey("__root__", index);
+          const resolvedPath = this.getProjectResolvedPath(proj);
+          items.push(
+            new ProjectTreeItem(
+              proj.label,
+              vscode.TreeItemCollapsibleState.None,
+              "project",
+              resolvedPath,
+              proj.path,
+              this.getProjectIconId(proj),
+              undefined,
+              projectKey,
+              this.getIssuesForKey(projectKey),
+              [],
+              proj,
+              index
+            )
+          );
+        });
       }
       return Promise.resolve(items);
     }
@@ -272,7 +305,7 @@ export class ProjectTreeDataProvider
     this._onDidChangeTreeData.fire();
   }
 
-  async addProject(): Promise<void> {
+  async addProject(targetItem?: ProjectTreeItem): Promise<void> {
     const folder = await vscode.window.showOpenDialog({
       canSelectFiles: false,
       canSelectFolders: true,
@@ -299,17 +332,28 @@ export class ProjectTreeDataProvider
     }
 
     this.loadConfig();
-    const categorySelection = await this.pickCategory({
-      placeholder: localize("addProject.chooseCategory", "Select category"),
-      allowCreate: true
-    });
+    let targetNode: CategoryNode | undefined;
+    let targetPath: CategoryPath = [];
 
-    if (!categorySelection) {
-      return;
+    if (targetItem && targetItem.nodeType === "category") {
+      targetPath = targetItem.categoryPath ?? [targetItem.label];
+      targetNode = this.getCategoryNodeByPath(targetPath);
     }
 
-    const targetNode = categorySelection.node;
-    const targetPath = categorySelection.path;
+    if (!targetNode) {
+      const categorySelection = await this.pickCategory({
+        placeholder: localize("addProject.chooseCategory", "Select category"),
+        allowCreate: true,
+        includeRootOption: true
+      });
+
+      if (!categorySelection) {
+        return;
+      }
+
+      targetNode = categorySelection.node;
+      targetPath = categorySelection.path;
+    }
 
     if (!Array.isArray(targetNode.projects)) {
       targetNode.projects = [];
@@ -337,20 +381,19 @@ export class ProjectTreeDataProvider
     }
   }
 
-  async addCategory(item?: ProjectTreeItem): Promise<void> {
+  async addCategory(
+    item?: ProjectTreeItem,
+    options?: { forceRoot?: boolean }
+  ): Promise<void> {
     this.loadConfig();
     let basePath: CategoryPath;
 
-    if (item && item.nodeType === "category") {
+    const shouldForceRoot = options?.forceRoot ?? false;
+
+    if (!shouldForceRoot && item && item.nodeType === "category") {
       basePath = item.categoryPath ?? [item.label];
     } else {
-      const picked = await this.pickParentCategoryPath({
-        placeholder: localize("addCategory.chooseParent", "Select parent category")
-      });
-      if (picked === undefined) {
-        return;
-      }
-      basePath = picked;
+      basePath = [];
     }
 
     const nameInput = await vscode.window.showInputBox({
@@ -650,24 +693,75 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    const label = this.formatCategoryPath(categoryPath);
-    const confirmation = await vscode.window.showWarningMessage(
-      localize("removeCategory.confirm", 'Remove category "{0}" and all nested items?', label),
-      { modal: true },
-      localize("removeCategory.confirmYes", "Remove"),
-      localize("removeCategory.confirmNo", "Cancel")
-    );
-
-    if (confirmation !== localize("removeCategory.confirmYes", "Remove")) {
+    const containerRecord = container.container as Record<string, unknown>;
+    const nodeValue = containerRecord[container.key];
+    if (!this.isPlainObject(nodeValue)) {
+      delete containerRecord[container.key];
+      await this.persistChanges();
       return;
     }
 
-    delete (container.container as Record<string, unknown>)[container.key];
+    const categoryNode = nodeValue as CategoryNode;
+    const label = this.formatCategoryPath(categoryPath);
+
+    if (!this.categoryHasContent(categoryNode)) {
+      delete containerRecord[container.key];
+      try {
+        await this.persistChanges(
+          localize("removeCategory.success", 'Category "{0}" removed.', label)
+        );
+      } catch (err) {
+        vscode.window.showErrorMessage(
+          localize(
+            "removeCategory.saveError",
+            "Failed to remove category: {0}",
+            (err as Error).message
+          )
+        );
+      }
+      return;
+    }
+
+    const deleteOption = localize("removeCategory.optionDelete", "Delete everything");
+    const moveOption = localize(
+      "removeCategory.optionMove",
+      "Move contents to top level"
+    );
+    const cancelOption = localize("removeCategory.confirmNo", "Cancel");
+
+    const choice = await vscode.window.showWarningMessage(
+      localize(
+        "removeCategory.chooseAction",
+        'Category "{0}" contains nested items. What should be done?',
+        label
+      ),
+      { modal: true },
+      deleteOption,
+      moveOption,
+      cancelOption
+    );
+
+    if (!choice || choice === cancelOption) {
+      return;
+    }
+
+    delete containerRecord[container.key];
 
     try {
-      await this.persistChanges(
-        localize("removeCategory.success", 'Category "{0}" removed.', label)
-      );
+      if (choice === moveOption) {
+        this.mergeCategoryIntoRoot(categoryNode);
+        await this.persistChanges(
+          localize(
+            "removeCategory.moveSuccess",
+            'Category "{0}" removed and contents moved to top level.',
+            label
+          )
+        );
+      } else {
+        await this.persistChanges(
+          localize("removeCategory.success", 'Category "{0}" removed.', label)
+        );
+      }
     } catch (err) {
       vscode.window.showErrorMessage(
         localize(
@@ -724,9 +818,7 @@ export class ProjectTreeDataProvider
   }
 
   dispose(): void {
-    if (this.watcher) {
-      this.watcher.close();
-    }
+    this.disposeWatcher();
   }
 
   public getConfigPath(): string {
@@ -737,6 +829,10 @@ export class ProjectTreeDataProvider
     }
 
     return path.join(storagePath, "projects.json");
+  }
+
+  private getConfigDirectory(): string {
+    return path.dirname(this.getConfigPath());
   }
 
   private joinConfigPath(base: string | undefined, key: string): string {
@@ -794,12 +890,8 @@ export class ProjectTreeDataProvider
     }
 
     if (!path.isAbsolute(expanded)) {
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (workspaceFolder) {
-        expanded = path.join(workspaceFolder, expanded);
-      } else {
-        expanded = path.join(homeDir, expanded);
-      }
+      const configDir = this.getConfigDirectory();
+      expanded = path.resolve(configDir, expanded);
     }
 
     return path.normalize(expanded);
@@ -856,6 +948,24 @@ export class ProjectTreeDataProvider
           node: currentNode
         });
       }
+    }
+
+    if (
+      options.includeRootOption &&
+      !(
+        options.includeKeepCurrent &&
+        options.currentPath &&
+        this.pathsEqual(options.currentPath, [])
+      )
+    ) {
+      picks.push({
+        label: options.rootLabel ?? localize("category.rootLabel", "Top level"),
+        description:
+          options.rootDescription ??
+          localize("category.rootDescription", "Create category at the root"),
+        pathSegments: [],
+        node: this.config
+      });
     }
 
     for (const category of categories) {
@@ -1098,6 +1208,9 @@ export class ProjectTreeDataProvider
     const result: Array<{ path: CategoryPath; node: CategoryNode }> = [];
 
     for (const [name, value] of Object.entries(this.config)) {
+      if (name === "projects") {
+        continue;
+      }
       if (this.isPlainObject(value)) {
         this.walkCategoryTree(value as CategoryNode, [name], result);
       }
@@ -1147,6 +1260,23 @@ export class ProjectTreeDataProvider
 
     const result: RootConfig = {};
     for (const [name, value] of Object.entries(raw)) {
+      if (name === "projects") {
+        if (Array.isArray(value)) {
+          result.projects = value.map((proj, index) =>
+            this.normalizeProject(proj, this.buildProjectKey("__root__", index))
+          );
+        } else {
+          this.recordIssue(
+            "__root__.projects",
+            localize(
+              "error.projectsArray",
+              "`projects` must be an array of projects."
+            )
+          );
+        }
+        continue;
+      }
+
       if (!this.isPlainObject(value)) {
         this.recordIssue(
           name,
@@ -1271,9 +1401,86 @@ export class ProjectTreeDataProvider
     };
   }
 
+  private mergeCategoryIntoRoot(source: CategoryNode): void {
+    const root = this.config;
+
+    if (Array.isArray(source.projects) && source.projects.length > 0) {
+      if (!Array.isArray(root.projects)) {
+        root.projects = [];
+      }
+      root.projects.push(...source.projects);
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+      if (key === "projects") {
+        continue;
+      }
+
+      if (this.isPlainObject(value)) {
+        const existing = root[key];
+        if (this.isPlainObject(existing)) {
+          this.mergeCategoryNodes(existing as CategoryNode, value as CategoryNode);
+        } else {
+          root[key] = value as CategoryNode;
+        }
+      } else {
+        root[key] = value;
+      }
+    }
+  }
+
+  private mergeCategoryNodes(target: CategoryNode, source: CategoryNode): CategoryNode {
+    if (Array.isArray(source.projects) && source.projects.length > 0) {
+      if (!Array.isArray(target.projects)) {
+        target.projects = [];
+      }
+      target.projects.push(...source.projects);
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+      if (key === "projects") {
+        continue;
+      }
+
+      if (this.isPlainObject(value)) {
+        const existing = target[key];
+        if (this.isPlainObject(existing)) {
+          this.mergeCategoryNodes(existing as CategoryNode, value as CategoryNode);
+        } else {
+          target[key] = value as CategoryNode;
+        }
+      } else {
+        target[key] = value;
+      }
+    }
+
+    return target;
+  }
+
+  private categoryHasContent(node: CategoryNode): boolean {
+    if (Array.isArray(node.projects) && node.projects.length > 0) {
+      return true;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "projects") {
+        continue;
+      }
+      if (this.isPlainObject(value)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private getCategoryNodeByPath(pathSegments?: CategoryPath): CategoryNode | undefined {
-    if (!pathSegments || pathSegments.length === 0) {
+    if (!pathSegments) {
       return undefined;
+    }
+
+    if (pathSegments.length === 0) {
+      return this.config;
     }
 
     const [first, ...rest] = pathSegments;
@@ -1296,7 +1503,7 @@ export class ProjectTreeDataProvider
 
   private getOrCreateCategoryNode(pathSegments: CategoryPath): CategoryNode {
     if (pathSegments.length === 0) {
-      throw new Error("Category path cannot be empty");
+      return this.config;
     }
 
     const [first, ...rest] = pathSegments;
@@ -1394,6 +1601,10 @@ export class ProjectTreeDataProvider
       return undefined;
     }
 
+    if (pathSegments.length === 1 && pathSegments[0] === "__root__") {
+      return { path: [], index };
+    }
+
     return { path: pathSegments, index };
   }
 
@@ -1440,7 +1651,9 @@ export class ProjectTreeDataProvider
       return this.formatPathForConfig(trimmed);
     }
 
-    return this.toPosixPath(trimmed);
+    const configDir = this.getConfigDirectory();
+    const resolved = path.resolve(configDir, trimmed);
+    return this.formatPathForConfig(resolved);
   }
 
   private async persistChanges(successMessage?: string): Promise<void> {
@@ -1487,22 +1700,74 @@ export class ProjectTreeDataProvider
 
   private setupWatcher(): void {
     const configPath = this.getConfigPath();
+    const fileExists = fs.existsSync(configPath);
+    const targetPath = fileExists ? configPath : path.dirname(configPath);
+    const watchType = fileExists ? "file" : "dir";
 
     try {
-      if (this.watcher) {
-        this.watcher.close();
-      }
+      this.disposeWatcher();
+      this.watcher = fs.watch(targetPath, { persistent: false }, (_, filename) => {
+        if (watchType === "dir") {
+          if (!filename || filename !== path.basename(configPath)) {
+            return;
+          }
+          if (fs.existsSync(configPath)) {
+            this.scheduleWatcherRestart();
+          }
+        } else {
+          if (!fs.existsSync(configPath)) {
+            this.scheduleWatcherRestart();
+          }
+        }
+        this.scheduleConfigReload();
+      });
 
-      if (!fs.existsSync(configPath)) {
-        return;
-      }
-
-      this.watcher = fs.watch(configPath, { persistent: false }, () => {
-        this.loadConfig();
-        this._onDidChangeTreeData.fire();
+      this.watcher.on("error", (err) => {
+        console.error("ProjectTree watcher error:", err);
+        this.scheduleWatcherRestart();
       });
     } catch (err) {
-      console.error("ProjectTree watcher error:", err);
+      console.error("ProjectTree watcher setup error:", err);
+      this.scheduleWatcherRestart();
+    }
+  }
+
+  private scheduleConfigReload(): void {
+    if (this.watcherDebounce) {
+      clearTimeout(this.watcherDebounce);
+    }
+
+    this.watcherDebounce = setTimeout(() => {
+      this.watcherDebounce = undefined;
+      this.loadConfig();
+      this._onDidChangeTreeData.fire();
+    }, 200);
+  }
+
+  private scheduleWatcherRestart(): void {
+    this.disposeWatcher();
+    if (this.watcherRetryTimeout) {
+      return;
+    }
+
+    this.watcherRetryTimeout = setTimeout(() => {
+      this.watcherRetryTimeout = undefined;
+      this.setupWatcher();
+    }, 1000);
+  }
+
+  private disposeWatcher(): void {
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = undefined;
+    }
+    if (this.watcherDebounce) {
+      clearTimeout(this.watcherDebounce);
+      this.watcherDebounce = undefined;
+    }
+    if (this.watcherRetryTimeout) {
+      clearTimeout(this.watcherRetryTimeout);
+      this.watcherRetryTimeout = undefined;
     }
   }
 }
