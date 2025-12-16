@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.3.2] - 2025-12-16
+
+### Added
+- Set a custom marketplace icon (`resources/icon.png`) so the extension displays branded art in the VS Code UI and Marketplace listings.
+
 ## [0.3.1] - 2025-12-16
 
 ### Fixed
