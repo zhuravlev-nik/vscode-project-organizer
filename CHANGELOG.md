@@ -5,6 +5,8 @@ All notable changes to the "vcode-project-tree" extension will be documented in 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+### Added
+- Expanded the automated test suite to cover config normalization, tree rendering, and path resolution helpers.
 
 ## [0.4.0] - 2025-12-16
 ### Added
