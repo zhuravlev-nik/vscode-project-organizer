@@ -6,7 +6,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 ### Added
-- Expanded the automated test suite to cover config normalization, tree rendering, and path resolution helpers.
+- Expanded the automated test suite to cover config normalization, tree rendering, path resolution helpers, and category/project command workflows.
 
 ## [0.4.0] - 2025-12-16
 ### Added

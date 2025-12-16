@@ -5,6 +5,93 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { ProjectTreeDataProvider, ProjectTreeItem, Project, RootConfig } from "../../projectTree";
 
+type WarningResponder =
+  | string
+  | undefined
+  | ((
+      ...args: unknown[]
+    ) => string | undefined | Promise<string | undefined>);
+
+function createWindowStub() {
+  const original = {
+    showInputBox: vscode.window.showInputBox,
+    showQuickPick: vscode.window.showQuickPick,
+    showOpenDialog: vscode.window.showOpenDialog,
+    showWarningMessage: vscode.window.showWarningMessage,
+    showInformationMessage: vscode.window.showInformationMessage
+  };
+
+  const inputQueue: Array<string | undefined> = [];
+  const quickPickQueue: Array<unknown> = [];
+  const openDialogQueue: Array<vscode.Uri[] | undefined> = [];
+  const warningQueue: Array<WarningResponder> = [];
+
+  function dequeue<T>(queue: Array<T>, name: string): T {
+    if (queue.length === 0) {
+      throw new Error(`Unexpected ${name} call`);
+    }
+    return queue.shift() as T;
+  }
+
+  const patchedWindow = vscode.window as typeof vscode.window & {
+    showInputBox: typeof vscode.window.showInputBox;
+    showQuickPick: typeof vscode.window.showQuickPick;
+    showOpenDialog: typeof vscode.window.showOpenDialog;
+    showWarningMessage: typeof vscode.window.showWarningMessage;
+    showInformationMessage: typeof vscode.window.showInformationMessage;
+  };
+
+  patchedWindow.showInputBox = ((..._args: Parameters<typeof original.showInputBox>) => {
+    const value = dequeue(inputQueue, "showInputBox");
+    return Promise.resolve(value) as ReturnType<typeof original.showInputBox>;
+  }) as typeof original.showInputBox;
+
+  patchedWindow.showQuickPick = ((..._args: Parameters<typeof original.showQuickPick>) => {
+    const value = dequeue(quickPickQueue, "showQuickPick");
+    return Promise.resolve(value) as ReturnType<typeof original.showQuickPick>;
+  }) as typeof original.showQuickPick;
+
+  patchedWindow.showOpenDialog = ((..._args: Parameters<typeof original.showOpenDialog>) => {
+    const value = dequeue(openDialogQueue, "showOpenDialog");
+    return Promise.resolve(value) as ReturnType<typeof original.showOpenDialog>;
+  }) as typeof original.showOpenDialog;
+
+  patchedWindow.showWarningMessage = ((
+    ...args: Parameters<typeof original.showWarningMessage>
+  ) => {
+    const next = dequeue(warningQueue, "showWarningMessage");
+    if (typeof next === "function") {
+      return next(...args);
+    }
+    return Promise.resolve(next) as ReturnType<typeof original.showWarningMessage>;
+  }) as typeof original.showWarningMessage;
+
+  patchedWindow.showInformationMessage = ((..._args: Parameters<typeof original.showInformationMessage>) =>
+    Promise.resolve(undefined)) as typeof original.showInformationMessage;
+
+  return {
+    enqueueInput(value: string | undefined) {
+      inputQueue.push(value);
+    },
+    enqueueQuickPick<T>(value: T) {
+      quickPickQueue.push(value);
+    },
+    enqueueOpenDialogPath(fsPath: string) {
+      openDialogQueue.push([vscode.Uri.file(fsPath)]);
+    },
+    enqueueWarning(value: WarningResponder) {
+      warningQueue.push(value);
+    },
+    dispose() {
+      patchedWindow.showInputBox = original.showInputBox;
+      patchedWindow.showQuickPick = original.showQuickPick;
+      patchedWindow.showOpenDialog = original.showOpenDialog;
+      patchedWindow.showWarningMessage = original.showWarningMessage;
+      patchedWindow.showInformationMessage = original.showInformationMessage;
+    }
+  };
+}
+
 suite("ProjectTreeDataProvider", () => {
   async function createProvider(): Promise<{
     provider: ProjectTreeDataProvider;
@@ -183,6 +270,99 @@ suite("ProjectTreeDataProvider", () => {
       }).resolveAbsolutePath("relative/project");
 
       assert.strictEqual(resolved, path.join(storageDir, "relative", "project"));
+    });
+  });
+
+  test("project and category lifecycle commands", async () => {
+    await withProvider(async (provider) => {
+      const windowStub = createWindowStub();
+      try {
+        async function getRootItem(label: string): Promise<ProjectTreeItem> {
+          const roots = await provider.getChildren();
+          const match = roots.find((item) => item.label === label);
+          assert.ok(match);
+          return match!;
+        }
+
+        windowStub.enqueueInput("Clients");
+        await provider.addCategory(undefined, { forceRoot: true });
+
+        let clientsCategory = await getRootItem("Clients");
+
+        windowStub.enqueueInput("Internal");
+        await provider.addCategory(clientsCategory);
+
+        clientsCategory = await getRootItem("Clients");
+        const clientsChildren = await provider.getChildren(clientsCategory);
+        const internalCategory = clientsChildren.find((item) => item.label === "Internal");
+        assert.ok(internalCategory);
+
+        windowStub.enqueueOpenDialogPath("/tmp/project-alpha");
+        windowStub.enqueueInput("Alpha");
+        await provider.addProject(internalCategory);
+
+        const internalChildren = await provider.getChildren(internalCategory);
+        const alphaProject = internalChildren.find((item) => item.label === "Alpha");
+        assert.ok(alphaProject);
+
+        windowStub.enqueueInput("Alpha v2");
+        windowStub.enqueueInput("/var/projects/alpha-v2");
+        windowStub.enqueueInput("beaker");
+        const currentConfig = (provider as unknown as { config: RootConfig }).config;
+        windowStub.enqueueQuickPick({
+          label: "Clients",
+          pathSegments: ["Clients"],
+          node: currentConfig.categories.Clients
+        });
+        await provider.editProject(alphaProject);
+
+        clientsCategory = await getRootItem("Clients");
+        const clientsAfterEdit = await provider.getChildren(clientsCategory);
+        const alphaInClients = clientsAfterEdit.find((item) => item.label === "Alpha v2");
+        assert.ok(alphaInClients);
+        assert.deepStrictEqual(alphaInClients?.categoryPath, ["Clients"]);
+
+        windowStub.enqueueWarning((...args: unknown[]) => {
+          const options = args.slice(2) as string[];
+          return options[0];
+        });
+        await provider.removeProject(alphaInClients!);
+
+        clientsCategory = await getRootItem("Clients");
+        const clientsAfterRemoval = await provider.getChildren(clientsCategory);
+        assert.ok(!clientsAfterRemoval.some((item) => item.label === "Alpha v2"));
+
+        windowStub.enqueueInput("Core");
+        windowStub.enqueueQuickPick({
+          label: "Top level",
+          path: []
+        });
+        await provider.renameCategory(internalCategory!);
+
+        const coreCategory = await getRootItem("Core");
+
+        windowStub.enqueueOpenDialogPath("/tmp/project-beta");
+        windowStub.enqueueInput("Beta");
+        await provider.addProject(coreCategory!);
+
+        const coreChildren = await provider.getChildren(coreCategory);
+        const betaProject = coreChildren.find((item) => item.label === "Beta");
+        assert.ok(betaProject);
+
+        windowStub.enqueueWarning((...args: unknown[]) => {
+          const options = args.slice(2) as string[];
+          return options[1];
+        });
+        await provider.removeCategory(coreCategory!);
+
+        const rootItems = await provider.getChildren();
+        const betaAtRoot = rootItems.find((item) => item.label === "Beta");
+        assert.ok(betaAtRoot);
+        assert.strictEqual(betaAtRoot?.nodeType, "project");
+        assert.deepStrictEqual(betaAtRoot?.categoryPath, []);
+      } finally {
+        windowStub.dispose();
+      }
     });
   });
 });
