@@ -139,11 +139,16 @@ export class ProjectTreeItem extends vscode.TreeItem {
       this.iconPath = hasErrors
         ? new vscode.ThemeIcon("warning")
         : new vscode.ThemeIcon(this.iconId ?? "project");
-      /*this.command = {
-        title: "Open Project (Current Window)",
-        command: "projectTree.openProjectHere",
-        arguments: [this]
-      };*/
+      if (this.projectPath) {
+        this.command = {
+          title: localize(
+            "project.command.openHereTitle",
+            "Open Project (Current Window)"
+          ),
+          command: "projectTree.openProjectHere",
+          arguments: [this]
+        };
+      }
     } else {
       this.contextValue = "projectTree.category";
       this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;

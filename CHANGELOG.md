@@ -5,6 +5,8 @@ All notable changes to the "vcode-project-tree" extension will be documented in 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+### Changed
+- Double-clicking or pressing Enter on a project row now opens it immediately in the current window via the existing open command.
 ### Fixed
 - Resolved project edit/remove failures for categories containing dots by relying on tree metadata instead of parsing config keys, and cleaned up lint warnings in the open-project commands.
 - Added the missing Russian translation for the “Add Root Category” command so the localized UI is complete.
