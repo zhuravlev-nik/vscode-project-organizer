@@ -904,34 +904,9 @@ export class ProjectTreeDataProvider
       return cached;
     }
 
-    const resolved = this.resolveProjectPathValue(project.path);
+    const resolved = this.resolveAbsolutePath(project.path);
     this.resolvedPathCache.set(project, resolved);
     return resolved;
-  }
-
-  private resolveProjectPathValue(rawPath: string): string {
-    const input = rawPath?.trim();
-    if (!input) {
-      return "";
-    }
-
-    let expanded = input;
-    const homeDir = os.homedir();
-
-    if (expanded.startsWith("~")) {
-      const remainder = expanded.slice(1);
-      if (!remainder || remainder.startsWith("/") || remainder.startsWith("\\")) {
-        const relativePart = remainder.replace(/^[\\/]/, "");
-        expanded = path.join(homeDir, relativePart);
-      }
-    }
-
-    if (!path.isAbsolute(expanded)) {
-      const configDir = this.getConfigDirectory();
-      expanded = path.resolve(configDir, expanded);
-    }
-
-    return path.normalize(expanded);
   }
 
   private formatPathForConfig(fullPath: string): string {
@@ -1701,24 +1676,26 @@ export class ProjectTreeDataProvider
   }
 
   private normalizePathInput(value: string): string {
-    const trimmed = value.trim();
-    if (!trimmed) {
+    return this.formatPathForConfig(this.resolveAbsolutePath(value));
+  }
+
+  private resolveAbsolutePath(rawPath: string): string {
+    const input = rawPath?.trim();
+    if (!input) {
       return "";
     }
 
-    if (trimmed.startsWith("~")) {
-      const remainder = trimmed.slice(1).replace(/^[\\/]/, "");
-      const absolute = path.join(os.homedir(), remainder);
-      return this.formatPathForConfig(absolute);
+    if (input.startsWith("~")) {
+      const remainder = input.slice(1).replace(/^[\\/]/, "");
+      return path.normalize(path.join(os.homedir(), remainder));
     }
 
-    if (path.isAbsolute(trimmed)) {
-      return this.formatPathForConfig(trimmed);
+    if (path.isAbsolute(input)) {
+      return path.normalize(input);
     }
 
     const configDir = this.getConfigDirectory();
-    const resolved = path.resolve(configDir, trimmed);
-    return this.formatPathForConfig(resolved);
+    return path.normalize(path.resolve(configDir, input));
   }
 
   private async persistChanges(successMessage?: string): Promise<void> {
