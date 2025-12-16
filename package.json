@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nzhuravlev/vscode-project-tree"
+    "url": "https://github.com/zhuravlev-nik/vscode-project-organizer"
   },
   "engines": {
     "vscode": "^1.107.0"
