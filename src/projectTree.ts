@@ -376,30 +376,32 @@ export class ProjectTreeDataProvider
       targetPath = [];
     }
 
-    if (!Array.isArray(targetNode.projects)) {
-      targetNode.projects = [];
-    }
-
-    targetNode.projects.push({
-      label,
-      path: this.formatPathForConfig(folderPath)
-    });
-
     const categoryDisplay = this.formatCategoryPath(targetPath);
-
-    try {
-      await this.persistChanges(
-        localize("addProject.success", 'Project "{0}" added to "{1}".', label, categoryDisplay)
-      );
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        localize(
-          "addProject.saveError",
-          "Failed to save projects.json: {0}",
-          (err as Error).message
-        )
-      );
-    }
+    await this.runMutation(
+      () => {
+        if (!Array.isArray(targetNode.projects)) {
+          targetNode.projects = [];
+        }
+        targetNode.projects.push({
+          label,
+          path: this.formatPathForConfig(folderPath)
+        });
+      },
+      {
+        successMessage: localize(
+          "addProject.success",
+          'Project "{0}" added to "{1}".',
+          label,
+          categoryDisplay
+        ),
+        errorMessage: (error) =>
+          localize(
+            "addProject.saveError",
+            "Failed to save projects.json: {0}",
+            error.message
+          )
+      }
+    );
   }
 
   async addCategory(
@@ -450,25 +452,24 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    this.getOrCreateCategoryNode(newPath);
-
-    try {
-      await this.persistChanges(
-        localize(
+    await this.runMutation(
+      () => {
+        this.getOrCreateCategoryNode(newPath);
+      },
+      {
+        successMessage: localize(
           "addCategory.success",
           'Category "{0}" created.',
           this.formatCategoryPath(newPath)
-        )
-      );
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        localize(
-          "addCategory.saveError",
-          "Failed to add category: {0}",
-          (err as Error).message
-        )
-      );
-    }
+        ),
+        errorMessage: (error) =>
+          localize(
+            "addCategory.saveError",
+            "Failed to add category: {0}",
+            error.message
+          )
+      }
+    );
   }
 
   async editProject(item?: ProjectTreeItem): Promise<void> {
@@ -545,35 +546,36 @@ export class ProjectTreeDataProvider
       icon: normalizedIcon
     };
 
-    if (
-      this.pathsEqual(reference.categoryPath, targetCategory.path)
-    ) {
-      if (Array.isArray(reference.categoryNode.projects)) {
-        reference.categoryNode.projects[reference.index] = updatedProject;
+    await this.runMutation(
+      () => {
+        if (this.pathsEqual(reference.categoryPath, targetCategory.path)) {
+          if (Array.isArray(reference.categoryNode.projects)) {
+            reference.categoryNode.projects[reference.index] = updatedProject;
+          }
+        } else {
+          if (Array.isArray(reference.categoryNode.projects)) {
+            reference.categoryNode.projects.splice(reference.index, 1);
+          }
+          if (!Array.isArray(targetCategory.node.projects)) {
+            targetCategory.node.projects = [];
+          }
+          targetCategory.node.projects.push(updatedProject);
+        }
+      },
+      {
+        successMessage: localize(
+          "editProject.success",
+          'Project "{0}" updated.',
+          updatedProject.label
+        ),
+        errorMessage: (error) =>
+          localize(
+            "editProject.saveError",
+            "Failed to update project: {0}",
+            error.message
+          )
       }
-    } else {
-      if (Array.isArray(reference.categoryNode.projects)) {
-        reference.categoryNode.projects.splice(reference.index, 1);
-      }
-      if (!Array.isArray(targetCategory.node.projects)) {
-        targetCategory.node.projects = [];
-      }
-      targetCategory.node.projects.push(updatedProject);
-    }
-
-    try {
-      await this.persistChanges(
-        localize("editProject.success", 'Project "{0}" updated.', updatedProject.label)
-      );
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        localize(
-          "editProject.saveError",
-          "Failed to update project: {0}",
-          (err as Error).message
-        )
-      );
-    }
+    );
   }
 
   async renameCategory(item?: ProjectTreeItem): Promise<void> {
@@ -664,39 +666,39 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    const node = (container.container as Record<string, unknown>)[container.key] as CategoryNode;
-    delete (container.container as Record<string, unknown>)[container.key];
-
-    if (targetParent.length === 0) {
-      this.config[newName] = node;
-    } else {
-      const destination = this.getCategoryNodeByPath(targetParent);
-      if (!destination) {
-        vscode.window.showErrorMessage(
-          localize("error.categoryMissing", "Category entry could not be found in config.")
-        );
-        return;
-      }
-      destination[newName] = node;
+    const destination =
+      targetParent.length === 0 ? undefined : this.getCategoryNodeByPath(targetParent);
+    if (targetParent.length > 0 && !destination) {
+      vscode.window.showErrorMessage(
+        localize("error.categoryMissing", "Category entry could not be found in config.")
+      );
+      return;
     }
 
-    try {
-      await this.persistChanges(
-        localize(
+    await this.runMutation(
+      () => {
+        const node = (container.container as Record<string, unknown>)[container.key] as CategoryNode;
+        delete (container.container as Record<string, unknown>)[container.key];
+        if (targetParent.length === 0) {
+          this.config[newName] = node;
+        } else {
+          (destination as CategoryNode)[newName] = node;
+        }
+      },
+      {
+        successMessage: localize(
           "renameCategory.success",
           'Category moved to "{0}".',
           this.formatCategoryPath(targetPath)
-        )
-      );
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        localize(
-          "renameCategory.saveError",
-          "Failed to rename category: {0}",
-          (err as Error).message
-        )
-      );
-    }
+        ),
+        errorMessage: (error) =>
+          localize(
+            "renameCategory.saveError",
+            "Failed to rename category: {0}",
+            error.message
+          )
+      }
+    );
   }
 
   async removeCategory(item?: ProjectTreeItem): Promise<void> {
@@ -717,8 +719,19 @@ export class ProjectTreeDataProvider
     const containerRecord = container.container as Record<string, unknown>;
     const nodeValue = containerRecord[container.key];
     if (!this.isPlainObject(nodeValue)) {
-      delete containerRecord[container.key];
-      await this.persistChanges();
+      await this.runMutation(
+        () => {
+          delete containerRecord[container.key];
+        },
+        {
+          errorMessage: (error) =>
+            localize(
+              "removeCategory.saveError",
+              "Failed to remove category: {0}",
+              error.message
+            )
+        }
+      );
       return;
     }
 
@@ -726,20 +739,20 @@ export class ProjectTreeDataProvider
     const label = this.formatCategoryPath(categoryPath);
 
     if (!this.categoryHasContent(categoryNode)) {
-      delete containerRecord[container.key];
-      try {
-        await this.persistChanges(
-          localize("removeCategory.success", 'Category "{0}" removed.', label)
-        );
-      } catch (err) {
-        vscode.window.showErrorMessage(
-          localize(
-            "removeCategory.saveError",
-            "Failed to remove category: {0}",
-            (err as Error).message
-          )
-        );
-      }
+      await this.runMutation(
+        () => {
+          delete containerRecord[container.key];
+        },
+        {
+          successMessage: localize("removeCategory.success", 'Category "{0}" removed.', label),
+          errorMessage: (error) =>
+            localize(
+              "removeCategory.saveError",
+              "Failed to remove category: {0}",
+              error.message
+            )
+        }
+      );
       return;
     }
 
@@ -764,32 +777,30 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    delete containerRecord[container.key];
-
-    try {
-      if (choice === moveOption) {
-        this.mergeCategoryIntoRoot(categoryNode);
-        await this.persistChanges(
+    await this.runMutation(
+      () => {
+        delete containerRecord[container.key];
+        if (choice === moveOption) {
+          this.mergeCategoryIntoRoot(categoryNode);
+        }
+      },
+      {
+        successMessage:
+          choice === moveOption
+            ? localize(
+                "removeCategory.moveSuccess",
+                'Category "{0}" removed and contents moved to top level.',
+                label
+              )
+            : localize("removeCategory.success", 'Category "{0}" removed.', label),
+        errorMessage: (error) =>
           localize(
-            "removeCategory.moveSuccess",
-            'Category "{0}" removed and contents moved to top level.',
-            label
+            "removeCategory.saveError",
+            "Failed to remove category: {0}",
+            error.message
           )
-        );
-      } else {
-        await this.persistChanges(
-          localize("removeCategory.success", 'Category "{0}" removed.', label)
-        );
       }
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        localize(
-          "removeCategory.saveError",
-          "Failed to remove category: {0}",
-          (err as Error).message
-        )
-      );
-    }
+    );
   }
 
   async removeProject(item?: ProjectTreeItem): Promise<void> {
@@ -815,24 +826,32 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    reference.categoryNode.projects.splice(reference.index, 1);
-    if (reference.categoryNode.projects.length === 0) {
-      delete reference.categoryNode.projects;
+    const projects = reference.categoryNode.projects;
+    if (!projects) {
+      return;
     }
 
-    try {
-      await this.persistChanges(
-        localize("removeProject.success", 'Project "{0}" removed.', reference.project.label)
-      );
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        localize(
-          "removeProject.saveError",
-          "Failed to remove project: {0}",
-          (err as Error).message
-        )
-      );
-    }
+    await this.runMutation(
+      () => {
+        projects.splice(reference.index, 1);
+        if (projects.length === 0) {
+          delete reference.categoryNode.projects;
+        }
+      },
+      {
+        successMessage: localize(
+          "removeProject.success",
+          'Project "{0}" removed.',
+          reference.project.label
+        ),
+        errorMessage: (error) =>
+          localize(
+            "removeProject.saveError",
+            "Failed to remove project: {0}",
+            error.message
+          )
+      }
+    );
   }
 
   dispose(): void {
@@ -1707,6 +1726,25 @@ export class ProjectTreeDataProvider
     await this.reloadConfigFromDisk();
     if (successMessage) {
       vscode.window.showInformationMessage(successMessage);
+    }
+  }
+
+  private async runMutation(
+    mutation: () => void | Promise<void>,
+    options?: {
+      successMessage?: string;
+      errorMessage?: (err: Error) => string;
+    }
+  ): Promise<void> {
+    try {
+      await mutation();
+      await this.persistChanges(options?.successMessage);
+    } catch (err) {
+      const error = err as Error;
+      const errorMessage = options?.errorMessage?.(error) ?? error.message;
+      if (errorMessage) {
+        vscode.window.showErrorMessage(errorMessage);
+      }
     }
   }
 
