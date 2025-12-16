@@ -5,6 +5,8 @@ All notable changes to the "vcode-project-tree" extension will be documented in 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+### Fixed
+- Resolved project edit/remove failures for categories containing dots by relying on tree metadata instead of parsing config keys, and cleaned up lint warnings in the open-project commands.
 
 ## [0.3.3] - 2025-12-16
 

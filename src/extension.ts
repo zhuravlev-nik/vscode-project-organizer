@@ -101,7 +101,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "projectTree.openProjectHere",
       async (item: ProjectTreeItem) => {
-        if (!item || !item.projectPath) return;
+        if (!item || !item.projectPath) {
+          return;
+        }
 
         const uri = vscode.Uri.file(item.projectPath);
         await vscode.commands.executeCommand("vscode.openFolder", uri, false);
@@ -113,7 +115,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "projectTree.openProject",
       async (item: ProjectTreeItem) => {
-        if (!item || !item.projectPath) return;
+        if (!item || !item.projectPath) {
+          return;
+        }
 
         const uri = vscode.Uri.file(item.projectPath);
         await vscode.commands.executeCommand("vscode.openFolder", uri, true);

@@ -1517,10 +1517,9 @@ export class ProjectTreeDataProvider
       );
       return undefined;
     }
-    1
     const parsed = this.parseProjectConfigPath(item.configPath);
-    const categoryPath = parsed?.path ?? item.categoryPath;
-    const index = parsed?.index ?? item.projectIndex;
+    const categoryPath = item.categoryPath ?? parsed?.path;
+    const index = item.projectIndex ?? parsed?.index;
 
     if (!categoryPath || index === undefined) {
       vscode.window.showErrorMessage(
