@@ -58,6 +58,25 @@ type ProjectReference = {
   project: Project;
 };
 
+type CategoryEntry = {
+  label: string;
+  description?: string;
+  path: CategoryPath;
+  node: CategoryNode;
+};
+
+type CategoryEntryOptions = {
+  includeKeepCurrent?: boolean;
+  currentPath?: CategoryPath;
+  keepCurrentLabel?: string;
+  keepCurrentDescription?: string;
+  includeRootOption?: boolean;
+  rootLabel?: string;
+  rootDescription?: string;
+  skipCurrentFromList?: boolean;
+  excludeDescendantsOf?: CategoryPath;
+};
+
 type CategoryContainer = {
   container: RootConfig | CategoryNode;
   key: string;
@@ -311,7 +330,7 @@ export class ProjectTreeDataProvider
       options.index
     );
   }
- 
+
   refresh(): void {
     this.loadConfig();
     this._onDidChangeTreeData.fire();
@@ -353,18 +372,8 @@ export class ProjectTreeDataProvider
     }
 
     if (!targetNode) {
-      const categorySelection = await this.pickCategory({
-        placeholder: localize("addProject.chooseCategory", "Select category"),
-        allowCreate: true,
-        includeRootOption: true
-      });
-
-      if (!categorySelection) {
-        return;
-      }
-
-      targetNode = categorySelection.node;
-      targetPath = categorySelection.path;
+      targetNode = this.config;
+      targetPath = [];
     }
 
     if (!Array.isArray(targetNode.projects)) {
@@ -936,61 +945,91 @@ export class ProjectTreeDataProvider
     return pathSegments.join(" / ");
   }
 
-  private async pickCategory(
-    options: CategoryPickOptions
-  ): Promise<CategorySelection | undefined> {
-    const picks: CategoryPick[] = [];
-    const categories = this.collectCategoryNodes();
+  private buildCategoryEntries(options: CategoryEntryOptions): CategoryEntry[] {
+    const entries: CategoryEntry[] = [];
 
-    if (
-      options.includeKeepCurrent &&
-      options.currentPath
-    ) {
+    if (options.includeKeepCurrent && options.currentPath) {
       const currentNode = this.getCategoryNodeByPath(options.currentPath);
       if (currentNode) {
-        picks.push({
+        entries.push({
           label:
             options.keepCurrentLabel ??
             this.formatCategoryPath(options.currentPath),
-          description: localize("editProject.currentCategoryDescription", "Current category"),
-          pathSegments: options.currentPath,
+          description: options.keepCurrentDescription,
+          path: options.currentPath,
           node: currentNode
         });
       }
     }
 
-    if (
+    const shouldIncludeRoot =
       options.includeRootOption &&
       !(
         options.includeKeepCurrent &&
         options.currentPath &&
         this.pathsEqual(options.currentPath, [])
-      )
-    ) {
-      picks.push({
+      );
+
+    if (shouldIncludeRoot) {
+      entries.push({
         label: options.rootLabel ?? localize("category.rootLabel", "Top level"),
         description:
           options.rootDescription ??
           localize("category.rootDescription", "Create category at the root"),
-        pathSegments: [],
+        path: [],
         node: this.config
       });
     }
 
+    const categories = this.collectCategoryNodes();
     for (const category of categories) {
       if (
-        options.includeKeepCurrent &&
+        options.excludeDescendantsOf &&
+        this.isSameOrDescendantPath(category.path, options.excludeDescendantsOf)
+      ) {
+        continue;
+      }
+
+      if (
+        options.skipCurrentFromList &&
         options.currentPath &&
         this.pathsEqual(category.path, options.currentPath)
       ) {
         continue;
       }
-      picks.push({
+
+      entries.push({
         label: this.formatCategoryPath(category.path),
-        pathSegments: category.path,
+        path: category.path,
         node: category.node
       });
     }
+
+    return entries;
+  }
+
+  private async pickCategory(
+    options: CategoryPickOptions
+  ): Promise<CategorySelection | undefined> {
+    const entries = this.buildCategoryEntries({
+      includeKeepCurrent: options.includeKeepCurrent,
+      currentPath: options.currentPath,
+      keepCurrentLabel: options.keepCurrentLabel,
+      keepCurrentDescription: localize(
+        "editProject.currentCategoryDescription",
+        "Current category"
+      ),
+      includeRootOption: options.includeRootOption,
+      rootLabel: options.rootLabel,
+      rootDescription: options.rootDescription,
+      skipCurrentFromList: Boolean(options.includeKeepCurrent && options.currentPath)
+    });
+    const picks: CategoryPick[] = entries.map((entry) => ({
+      label: entry.label,
+      description: entry.description,
+      pathSegments: entry.path,
+      node: entry.node
+    }));
 
     if (options.allowCreate) {
       picks.push({
@@ -1052,58 +1091,26 @@ export class ProjectTreeDataProvider
   private async pickParentCategoryPath(
     options: ParentCategoryPickOptions
   ): Promise<CategoryPath | undefined> {
-    const picks: Array<vscode.QuickPickItem & { path: CategoryPath }> = [];
-
-    if (options.currentParentPath) {
-      picks.push({
-        label:
-          options.keepCurrentLabel ??
-          this.formatCategoryPath(options.currentParentPath),
-        description: localize(
-          "renameCategory.currentParentDescription",
-          "Current parent"
-        ),
-        path: options.currentParentPath
-      });
-    }
-
-    const rootPick = {
-      label: localize("category.rootLabel", "Top level"),
-      description: localize(
-        "category.rootDescription",
-        "Create category at the root"
+    const entries = this.buildCategoryEntries({
+      includeKeepCurrent: Boolean(options.currentParentPath),
+      currentPath: options.currentParentPath,
+      keepCurrentLabel: options.keepCurrentLabel,
+      keepCurrentDescription: localize(
+        "renameCategory.currentParentDescription",
+        "Current parent"
       ),
-      path: [] as CategoryPath
-    };
-
-    if (
-      !options.currentParentPath ||
-      options.currentParentPath.length > 0
-    ) {
-      picks.push(rootPick);
-    }
-
-    const categories = this.collectCategoryNodes();
-    for (const category of categories) {
-      if (
-        options.excludePath &&
-        this.isSameOrDescendantPath(category.path, options.excludePath)
-      ) {
-        continue;
-      }
-
-      if (
-        options.currentParentPath &&
-        this.pathsEqual(category.path, options.currentParentPath)
-      ) {
-        continue;
-      }
-
-      picks.push({
-        label: this.formatCategoryPath(category.path),
-        path: category.path
-      });
-    }
+      includeRootOption:
+        !options.currentParentPath || options.currentParentPath.length > 0,
+      skipCurrentFromList: Boolean(options.currentParentPath),
+      excludeDescendantsOf: options.excludePath
+    });
+    const picks: Array<vscode.QuickPickItem & { path: CategoryPath }> = entries.map(
+      (entry) => ({
+        label: entry.label,
+        description: entry.description,
+        path: entry.path
+      })
+    );
 
     if (picks.length === 0) {
       return undefined;
@@ -1548,7 +1555,7 @@ export class ProjectTreeDataProvider
       );
       return undefined;
     }
-
+    1
     const parsed = this.parseProjectConfigPath(item.configPath);
     const categoryPath = parsed?.path ?? item.categoryPath;
     const index = parsed?.index ?? item.projectIndex;
