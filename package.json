@@ -5,6 +5,10 @@
   "publisher": "nzhuravlev",
   "version": "0.3.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nzhuravlev/vscode-project-tree"
+  },
   "engines": {
     "vscode": "^1.107.0"
   },
