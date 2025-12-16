@@ -5,6 +5,8 @@ All notable changes to the "vcode-project-tree" extension will be documented in 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+
+## [0.4.0] - 2025-12-16
 ### Added
 - Added a Mocha-based VS Code test harness that exercises key Project Tree data operations so we can run `npm test` before publishing.
 ### Changed
