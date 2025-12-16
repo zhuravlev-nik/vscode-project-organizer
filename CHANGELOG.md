@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.3.3] - 2025-12-16
+
+### Changed
+- Refined the Marketplace icon (`resources/icon.png`) once more so the extension listing and Activity Bar show the final branding.
+
 ## [0.3.2] - 2025-12-16
 
 ### Added
