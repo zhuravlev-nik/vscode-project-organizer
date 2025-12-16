@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-12-16
+
+### Fixed
+- Corrected the repository URL in `package.json` so Marketplace links point to the public GitHub repo.
+
 ## [0.3.0] - 2025-12-16
 
 ### Changed
