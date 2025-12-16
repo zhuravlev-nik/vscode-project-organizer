@@ -5,6 +5,8 @@ All notable changes to the "vcode-project-tree" extension will be documented in 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+### Added
+- Added a Mocha-based VS Code test harness that exercises key Project Tree data operations so we can run `npm test` before publishing.
 ### Changed
 - Double-clicking or pressing Enter on a project row now opens it immediately in the current window via the existing open command.
 ### Fixed
