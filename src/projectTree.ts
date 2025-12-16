@@ -191,42 +191,27 @@ export class ProjectTreeDataProvider
         }
         const configPath = name;
         const categoryPath: CategoryPath = [name];
-        const categoryItem = new ProjectTreeItem(
-          name,
-          vscode.TreeItemCollapsibleState.Collapsed,
-          "category",
-          undefined,
-          undefined,
-          undefined,
-          node,
-          configPath,
-          this.getIssuesForKey(configPath),
-          categoryPath
+        items.push(
+          this.createCategoryTreeItem({
+            label: name,
+            node: node as CategoryNode,
+            configPath,
+            categoryPath
+          })
         );
-
-        items.push(categoryItem);
       }
 
       const rootProjects = this.config.projects;
       if (Array.isArray(rootProjects)) {
         rootProjects.forEach((proj, index) => {
           const projectKey = this.buildProjectKey("__root__", index);
-          const resolvedPath = this.getProjectResolvedPath(proj);
           items.push(
-            new ProjectTreeItem(
-              proj.label,
-              vscode.TreeItemCollapsibleState.None,
-              "project",
-              resolvedPath,
-              proj.path,
-              this.getProjectIconId(proj),
-              undefined,
-              projectKey,
-              this.getIssuesForKey(projectKey),
-              [],
-              proj,
+            this.createProjectTreeItem({
+              project: proj,
+              configPath: projectKey,
+              categoryPath: [],
               index
-            )
+            })
           );
         });
       }
@@ -246,22 +231,13 @@ export class ProjectTreeDataProvider
             element.configPath ?? element.label,
             index
           );
-          const resolvedPath = this.getProjectResolvedPath(proj);
           items.push(
-            new ProjectTreeItem(
-              proj.label,
-              vscode.TreeItemCollapsibleState.None,
-              "project",
-              resolvedPath,
-              proj.path,
-              this.getProjectIconId(proj),
-              undefined,
-              projectKey,
-              this.getIssuesForKey(projectKey),
-              currentCategoryPath,
-              proj,
+            this.createProjectTreeItem({
+              project: proj,
+              configPath: projectKey,
+              categoryPath: currentCategoryPath,
               index
-            )
+            })
           );
         });
       }
@@ -278,18 +254,12 @@ export class ProjectTreeDataProvider
             key
           ];
           items.push(
-            new ProjectTreeItem(
-              key,
-              vscode.TreeItemCollapsibleState.Collapsed,
-              "category",
-              undefined,
-              undefined,
-              undefined,
-              value as CategoryNode,
-              childPath,
-              this.getIssuesForKey(childPath),
-              childSegments
-            )
+            this.createCategoryTreeItem({
+              label: key,
+              node: value as CategoryNode,
+              configPath: childPath,
+              categoryPath: childSegments
+            })
           );
         }
       }
@@ -298,6 +268,48 @@ export class ProjectTreeDataProvider
     }
 
     return Promise.resolve([]);
+  }
+
+  private createCategoryTreeItem(options: {
+    label: string;
+    node: CategoryNode;
+    configPath: string;
+    categoryPath: CategoryPath;
+  }): ProjectTreeItem {
+    return new ProjectTreeItem(
+      options.label,
+      vscode.TreeItemCollapsibleState.Collapsed,
+      "category",
+      undefined,
+      undefined,
+      undefined,
+      options.node,
+      options.configPath,
+      this.getIssuesForKey(options.configPath),
+      options.categoryPath
+    );
+  }
+
+  private createProjectTreeItem(options: {
+    project: Project;
+    configPath: string;
+    categoryPath: CategoryPath;
+    index: number;
+  }): ProjectTreeItem {
+    return new ProjectTreeItem(
+      options.project.label,
+      vscode.TreeItemCollapsibleState.None,
+      "project",
+      this.getProjectResolvedPath(options.project),
+      options.project.path,
+      this.getProjectIconId(options.project),
+      undefined,
+      options.configPath,
+      this.getIssuesForKey(options.configPath),
+      options.categoryPath,
+      options.project,
+      options.index
+    );
   }
  
   refresh(): void {
@@ -727,7 +739,6 @@ export class ProjectTreeDataProvider
       "removeCategory.optionMove",
       "Move contents to top level"
     );
-    const cancelOption = localize("removeCategory.confirmNo", "Cancel");
 
     const choice = await vscode.window.showWarningMessage(
       localize(
@@ -737,11 +748,10 @@ export class ProjectTreeDataProvider
       ),
       { modal: true },
       deleteOption,
-      moveOption,
-      cancelOption
+      moveOption
     );
 
-    if (!choice || choice === cancelOption) {
+    if (!choice) {
       return;
     }
 
@@ -789,8 +799,7 @@ export class ProjectTreeDataProvider
         categoryLabel
       ),
       { modal: true },
-      localize("removeProject.confirmYes", "Remove"),
-      localize("removeProject.confirmNo", "Cancel")
+      localize("removeProject.confirmYes", "Remove")
     );
 
     if (confirmation !== localize("removeProject.confirmYes", "Remove")) {
