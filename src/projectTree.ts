@@ -10,10 +10,9 @@ export interface Project {
   icon?: string;
 }
 
-
 export interface CategoryNode {
+  categories: Record<string, CategoryNode>;
   projects?: Project[];
-  [key: string]: any;
 }
 
 export type RootConfig = CategoryNode;
@@ -78,7 +77,7 @@ type CategoryEntryOptions = {
 };
 
 type CategoryContainer = {
-  container: RootConfig | CategoryNode;
+  parent: CategoryNode;
   key: string;
 };
 
@@ -160,7 +159,7 @@ export class ProjectTreeDataProvider
   readonly onDidChangeTreeData: vscode.Event<ProjectTreeItem | undefined | void> =
     this._onDidChangeTreeData.event;
 
-  private config: RootConfig = {};
+  private config: RootConfig = { categories: {} };
   private watcher?: fs.FSWatcher;
   private watcherDebounce?: NodeJS.Timeout;
   private watcherRetryTimeout?: NodeJS.Timeout;
@@ -202,19 +201,13 @@ export class ProjectTreeDataProvider
 
     if (!element) {
       const items: ProjectTreeItem[] = [];
-      for (const [name, node] of Object.entries(this.config)) {
-        if (name === "projects") {
-          continue;
-        }
-        if (!this.isPlainObject(node)) {
-          continue;
-        }
+      for (const [name, node] of Object.entries(this.config.categories)) {
         const configPath = name;
         const categoryPath: CategoryPath = [name];
         items.push(
           this.createCategoryTreeItem({
             label: name,
-            node: node as CategoryNode,
+            node,
             configPath,
             categoryPath
           })
@@ -262,26 +255,23 @@ export class ProjectTreeDataProvider
         });
       }
 
-      for (const [key, value] of Object.entries(node)) {
-        if (key === "projects") continue;
-        if (typeof value === "object" && value !== null) {
-          const childPath = this.joinConfigPath(
-            element.configPath ?? element.label,
-            key
-          );
-          const childSegments: CategoryPath = [
-            ...currentCategoryPath,
-            key
-          ];
-          items.push(
-            this.createCategoryTreeItem({
-              label: key,
-              node: value as CategoryNode,
-              configPath: childPath,
-              categoryPath: childSegments
-            })
-          );
-        }
+      for (const [key, childNode] of Object.entries(node.categories)) {
+        const childPath = this.joinConfigPath(
+          element.configPath ?? element.label,
+          key
+        );
+        const childSegments: CategoryPath = [
+          ...currentCategoryPath,
+          key
+        ];
+        items.push(
+          this.createCategoryTreeItem({
+            label: key,
+            node: childNode,
+            configPath: childPath,
+            categoryPath: childSegments
+          })
+        );
       }
 
       return Promise.resolve(items);
@@ -667,8 +657,8 @@ export class ProjectTreeDataProvider
     }
 
     const destination =
-      targetParent.length === 0 ? undefined : this.getCategoryNodeByPath(targetParent);
-    if (targetParent.length > 0 && !destination) {
+      targetParent.length === 0 ? this.config : this.getCategoryNodeByPath(targetParent);
+    if (!destination) {
       vscode.window.showErrorMessage(
         localize("error.categoryMissing", "Category entry could not be found in config.")
       );
@@ -677,13 +667,14 @@ export class ProjectTreeDataProvider
 
     await this.runMutation(
       () => {
-        const node = (container.container as Record<string, unknown>)[container.key] as CategoryNode;
-        delete (container.container as Record<string, unknown>)[container.key];
-        if (targetParent.length === 0) {
-          this.config[newName] = node;
-        } else {
-          (destination as CategoryNode)[newName] = node;
+        const node = container.parent.categories[container.key];
+        if (!node) {
+          throw new Error(
+            localize("error.categoryMissing", "Category entry could not be found in config.")
+          );
         }
+        delete container.parent.categories[container.key];
+        destination.categories[newName] = node;
       },
       {
         successMessage: localize(
@@ -716,32 +707,19 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    const containerRecord = container.container as Record<string, unknown>;
-    const nodeValue = containerRecord[container.key];
-    if (!this.isPlainObject(nodeValue)) {
-      await this.runMutation(
-        () => {
-          delete containerRecord[container.key];
-        },
-        {
-          errorMessage: (error) =>
-            localize(
-              "removeCategory.saveError",
-              "Failed to remove category: {0}",
-              error.message
-            )
-        }
+    const categoryNode = container.parent.categories[container.key];
+    if (!categoryNode) {
+      vscode.window.showErrorMessage(
+        localize("error.categoryMissing", "Category entry could not be found in config.")
       );
       return;
     }
-
-    const categoryNode = nodeValue as CategoryNode;
     const label = this.formatCategoryPath(categoryPath);
 
     if (!this.categoryHasContent(categoryNode)) {
       await this.runMutation(
         () => {
-          delete containerRecord[container.key];
+          delete container.parent.categories[container.key];
         },
         {
           successMessage: localize("removeCategory.success", 'Category "{0}" removed.', label),
@@ -779,7 +757,7 @@ export class ProjectTreeDataProvider
 
     await this.runMutation(
       () => {
-        delete containerRecord[container.key];
+        delete container.parent.categories[container.key];
         if (choice === moveOption) {
           this.mergeCategoryIntoRoot(categoryNode);
         }
@@ -1155,27 +1133,20 @@ export class ProjectTreeDataProvider
       return undefined;
     }
 
-    if (path.length === 1) {
-      const key = path[0];
-      if (!this.isPlainObject(this.config[key])) {
-        return undefined;
-      }
-      return { container: this.config, key };
-    }
-
     const parentPath = path.slice(0, -1);
-    const parentNode = this.getCategoryNodeByPath(parentPath);
+    const parentNode =
+      parentPath.length === 0 ? this.config : this.getCategoryNodeByPath(parentPath);
     if (!parentNode) {
       return undefined;
     }
 
     const key = path[path.length - 1];
-    if (!this.isPlainObject(parentNode[key])) {
+    if (!parentNode.categories[key]) {
       return undefined;
     }
 
     return {
-      container: parentNode,
+      parent: parentNode,
       key
     };
   }
@@ -1215,14 +1186,14 @@ export class ProjectTreeDataProvider
         raw = await fs.promises.readFile(configPath, "utf8");
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-          this.config = {};
+          this.config = { categories: {} };
           return;
         }
         throw err;
       }
 
       if (!raw.trim()) {
-        this.config = {};
+        this.config = { categories: {} };
         return;
       }
 
@@ -1237,7 +1208,7 @@ export class ProjectTreeDataProvider
       );
       vscode.window.showErrorMessage(localized);
       this.recordIssue("__root__", localized);
-      this.config = {};
+      this.config = { categories: {} };
     } finally {
       this.handleValidationWarning();
       this._onDidChangeTreeData.fire();
@@ -1247,13 +1218,8 @@ export class ProjectTreeDataProvider
   private collectCategoryNodes(): Array<{ path: CategoryPath; node: CategoryNode }> {
     const result: Array<{ path: CategoryPath; node: CategoryNode }> = [];
 
-    for (const [name, value] of Object.entries(this.config)) {
-      if (name === "projects") {
-        continue;
-      }
-      if (this.isPlainObject(value)) {
-        this.walkCategoryTree(value as CategoryNode, [name], result);
-      }
+    for (const [name, node] of Object.entries(this.config.categories)) {
+      this.walkCategoryTree(node, [name], result);
     }
 
     return result;
@@ -1266,24 +1232,32 @@ export class ProjectTreeDataProvider
   ): void {
     bucket.push({ path: [...pathSegments], node });
 
-    for (const [key, value] of Object.entries(node)) {
-      if (key === "projects") {
-        continue;
-      }
-
-      if (this.isPlainObject(value)) {
-        this.walkCategoryTree(
-          value as CategoryNode,
-          [...pathSegments, key],
-          bucket
-        );
-      }
+    for (const [key, child] of Object.entries(node.categories)) {
+      this.walkCategoryTree(
+        child,
+        [...pathSegments, key],
+        bucket
+      );
     }
   }
   private async saveConfigToDisk(): Promise<void> {
     const configPath = this.getConfigPath();
-    const content = JSON.stringify(this.config, null, 2);
+    const serialized = this.serializeCategoryNode(this.config);
+    const content = JSON.stringify(serialized, null, 2);
     await fs.promises.writeFile(configPath, `${content}\n`, "utf8");
+  }
+
+  private serializeCategoryNode(node: CategoryNode): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    if (Array.isArray(node.projects)) {
+      result.projects = node.projects;
+    }
+
+    for (const [name, child] of Object.entries(node.categories)) {
+      result[name] = this.serializeCategoryNode(child);
+    }
+
+    return result;
   }
 
   private validateAndNormalizeConfig(raw: unknown): RootConfig {
@@ -1295,10 +1269,10 @@ export class ProjectTreeDataProvider
           "projects.json must be an object with categories."
         )
       );
-      return {};
+      return { categories: {} };
     }
 
-    const result: RootConfig = {};
+    const result: RootConfig = { categories: {} };
     for (const [name, value] of Object.entries(raw)) {
       if (name === "projects") {
         if (Array.isArray(value)) {
@@ -1328,7 +1302,7 @@ export class ProjectTreeDataProvider
         continue;
       }
 
-      result[name] = this.normalizeCategoryNode(
+      result.categories[name] = this.normalizeCategoryNode(
         value as Record<string, unknown>,
         name
       );
@@ -1341,7 +1315,7 @@ export class ProjectTreeDataProvider
     source: Record<string, unknown>,
     pathKey: string
   ): CategoryNode {
-    const node: CategoryNode = {};
+    const node: CategoryNode = { categories: {} };
 
     if ("projects" in source) {
       const projectsValue = source.projects;
@@ -1366,12 +1340,18 @@ export class ProjectTreeDataProvider
       }
 
       if (this.isPlainObject(value)) {
-        node[key] = this.normalizeCategoryNode(
+        node.categories[key] = this.normalizeCategoryNode(
           value as Record<string, unknown>,
           this.joinConfigPath(pathKey, key)
         );
       } else {
-        node[key] = value;
+        this.recordIssue(
+          this.joinConfigPath(pathKey, key),
+          localize(
+            "error.categoryShape",
+            "Category must be an object with nested projects."
+          )
+        );
       }
     }
 
@@ -1451,20 +1431,12 @@ export class ProjectTreeDataProvider
       root.projects.push(...source.projects);
     }
 
-    for (const [key, value] of Object.entries(source)) {
-      if (key === "projects") {
-        continue;
-      }
-
-      if (this.isPlainObject(value)) {
-        const existing = root[key];
-        if (this.isPlainObject(existing)) {
-          this.mergeCategoryNodes(existing as CategoryNode, value as CategoryNode);
-        } else {
-          root[key] = value as CategoryNode;
-        }
+    for (const [key, child] of Object.entries(source.categories)) {
+      const existing = root.categories[key];
+      if (existing) {
+        this.mergeCategoryNodes(existing, child);
       } else {
-        root[key] = value;
+        root.categories[key] = child;
       }
     }
   }
@@ -1477,20 +1449,12 @@ export class ProjectTreeDataProvider
       target.projects.push(...source.projects);
     }
 
-    for (const [key, value] of Object.entries(source)) {
-      if (key === "projects") {
-        continue;
-      }
-
-      if (this.isPlainObject(value)) {
-        const existing = target[key];
-        if (this.isPlainObject(existing)) {
-          this.mergeCategoryNodes(existing as CategoryNode, value as CategoryNode);
-        } else {
-          target[key] = value as CategoryNode;
-        }
+    for (const [key, child] of Object.entries(source.categories)) {
+      const existing = target.categories[key];
+      if (existing) {
+        this.mergeCategoryNodes(existing, child);
       } else {
-        target[key] = value;
+        target.categories[key] = child;
       }
     }
 
@@ -1502,16 +1466,7 @@ export class ProjectTreeDataProvider
       return true;
     }
 
-    for (const [key, value] of Object.entries(node)) {
-      if (key === "projects") {
-        continue;
-      }
-      if (this.isPlainObject(value)) {
-        return true;
-      }
-    }
-
-    return false;
+    return Object.keys(node.categories).length > 0;
   }
 
   private getCategoryNodeByPath(pathSegments?: CategoryPath): CategoryNode | undefined {
@@ -1523,19 +1478,13 @@ export class ProjectTreeDataProvider
       return this.config;
     }
 
-    const [first, ...rest] = pathSegments;
-    const rootValue = this.config[first];
-    if (!this.isPlainObject(rootValue)) {
-      return undefined;
-    }
-
-    let current: CategoryNode = rootValue as CategoryNode;
-    for (const segment of rest) {
-      const next = current[segment];
-      if (!this.isPlainObject(next)) {
+    let current: CategoryNode = this.config;
+    for (const segment of pathSegments) {
+      const next = current.categories[segment];
+      if (!next) {
         return undefined;
       }
-      current = next as CategoryNode;
+      current = next;
     }
 
     return current;
@@ -1546,25 +1495,14 @@ export class ProjectTreeDataProvider
       return this.config;
     }
 
-    const [first, ...rest] = pathSegments;
-    let current: CategoryNode;
-
-    if (this.isPlainObject(this.config[first])) {
-      current = this.config[first];
-    } else {
-      current = {};
-      this.config[first] = current;
-    }
-
-    for (const segment of rest) {
-      const existing = current[segment];
-      if (this.isPlainObject(existing)) {
-        current = existing as CategoryNode;
-      } else {
-        const newNode: CategoryNode = {};
-        current[segment] = newNode;
-        current = newNode;
+    let current: CategoryNode = this.config;
+    for (const segment of pathSegments) {
+      let next = current.categories[segment];
+      if (!next) {
+        next = { categories: {} };
+        current.categories[segment] = next;
       }
+      current = next;
     }
 
     return current;
