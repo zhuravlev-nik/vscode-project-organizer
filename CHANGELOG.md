@@ -5,11 +5,10 @@ All notable changes to the "vcode-project-tree" extension will be documented in 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
-### Added
-- Expanded the automated test suite to cover config normalization, tree rendering, path resolution helpers, and category/project command workflows.
 
 ## [0.4.0] - 2025-12-16
 ### Added
+- Expanded the automated test suite to cover config normalization, tree rendering, path resolution helpers, and category/project command workflows.
 - Added a Mocha-based VS Code test harness that exercises key Project Tree data operations so we can run `npm test` before publishing.
 ### Changed
 - Double-clicking or pressing Enter on a project row now opens it immediately in the current window via the existing open command.
