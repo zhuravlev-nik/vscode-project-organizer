@@ -1705,7 +1705,6 @@ export class ProjectTreeDataProvider
   private async persistChanges(successMessage?: string): Promise<void> {
     await this.saveConfigToDisk();
     await this.reloadConfigFromDisk();
-    this.setupWatcher();
     if (successMessage) {
       vscode.window.showInformationMessage(successMessage);
     }
@@ -1744,31 +1743,17 @@ export class ProjectTreeDataProvider
   }
 
   private setupWatcher(): void {
+    this.disposeWatcher();
     const configPath = this.getConfigPath();
-    const fileExists = fs.existsSync(configPath);
-    const targetPath = fileExists ? configPath : path.dirname(configPath);
-    const watchType = fileExists ? "file" : "dir";
-
+    const dir = path.dirname(configPath);
     try {
-      this.disposeWatcher();
-      this.watcher = fs.watch(targetPath, { persistent: false }, (_, filename) => {
-        if (watchType === "dir") {
-          if (!filename || filename !== path.basename(configPath)) {
-            return;
-          }
-          if (fs.existsSync(configPath)) {
-            this.scheduleWatcherRestart();
-          }
-        } else {
-          if (!fs.existsSync(configPath)) {
-            this.scheduleWatcherRestart();
-          }
+      this.watcher = fs.watch(dir, { persistent: false }, (_, filename) => {
+        if (!filename || filename !== path.basename(configPath)) {
+          return;
         }
         this.scheduleConfigReload();
       });
-
-      this.watcher.on("error", (err) => {
-        console.error("ProjectTree watcher error:", err);
+      this.watcher.on("error", () => {
         this.scheduleWatcherRestart();
       });
     } catch (err) {
@@ -1781,7 +1766,6 @@ export class ProjectTreeDataProvider
     if (this.watcherDebounce) {
       clearTimeout(this.watcherDebounce);
     }
-
     this.watcherDebounce = setTimeout(() => {
       this.watcherDebounce = undefined;
       void this.reloadConfigFromDisk();
@@ -1793,7 +1777,6 @@ export class ProjectTreeDataProvider
     if (this.watcherRetryTimeout) {
       return;
     }
-
     this.watcherRetryTimeout = setTimeout(() => {
       this.watcherRetryTimeout = undefined;
       this.setupWatcher();
