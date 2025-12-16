@@ -167,9 +167,10 @@ export class ProjectTreeDataProvider
   private validationIssues: Map<string, string[]> = new Map();
   private hadValidationErrors = false;
   private resolvedPathCache: WeakMap<Project, string> = new WeakMap();
+  private loadConfigPromise?: Promise<void>;
 
   constructor(private readonly context: vscode.ExtensionContext) {
-    this.loadConfig();
+    void this.reloadConfigFromDisk();
     this.setupWatcher();
   }
 
@@ -332,8 +333,7 @@ export class ProjectTreeDataProvider
   }
 
   refresh(): void {
-    this.loadConfig();
-    this._onDidChangeTreeData.fire();
+    void this.reloadConfigFromDisk();
   }
 
   async addProject(targetItem?: ProjectTreeItem): Promise<void> {
@@ -362,7 +362,7 @@ export class ProjectTreeDataProvider
       return;
     }
 
-    this.loadConfig();
+    await this.ensureConfigLoaded();
     let targetNode: CategoryNode | undefined;
     let targetPath: CategoryPath = [];
 
@@ -406,7 +406,7 @@ export class ProjectTreeDataProvider
     item?: ProjectTreeItem,
     options?: { forceRoot?: boolean }
   ): Promise<void> {
-    this.loadConfig();
+    await this.ensureConfigLoaded();
     let basePath: CategoryPath;
 
     const shouldForceRoot = options?.forceRoot ?? false;
@@ -472,7 +472,7 @@ export class ProjectTreeDataProvider
   }
 
   async editProject(item?: ProjectTreeItem): Promise<void> {
-    this.loadConfig();
+    await this.ensureConfigLoaded();
     const reference = this.resolveProjectReference(item);
     if (!reference) {
       return;
@@ -577,7 +577,7 @@ export class ProjectTreeDataProvider
   }
 
   async renameCategory(item?: ProjectTreeItem): Promise<void> {
-    this.loadConfig();
+    await this.ensureConfigLoaded();
     const categoryPath = this.resolveCategoryPath(item);
     if (!categoryPath) {
       return;
@@ -700,7 +700,7 @@ export class ProjectTreeDataProvider
   }
 
   async removeCategory(item?: ProjectTreeItem): Promise<void> {
-    this.loadConfig();
+    await this.ensureConfigLoaded();
     const categoryPath = this.resolveCategoryPath(item);
     if (!categoryPath) {
       return;
@@ -793,7 +793,7 @@ export class ProjectTreeDataProvider
   }
 
   async removeProject(item?: ProjectTreeItem): Promise<void> {
-    this.loadConfig();
+    await this.ensureConfigLoaded();
     const reference = this.resolveProjectReference(item);
     if (!reference || !Array.isArray(reference.categoryNode.projects)) {
       return;
@@ -1186,18 +1186,47 @@ export class ProjectTreeDataProvider
     };
   }
 
-  private loadConfig(): void {
+  private async reloadConfigFromDisk(): Promise<void> {
+    const loadPromise = this.readConfigFromDisk();
+    this.loadConfigPromise = loadPromise;
+    try {
+      await loadPromise;
+    } finally {
+      if (this.loadConfigPromise === loadPromise) {
+        this.loadConfigPromise = undefined;
+      }
+    }
+  }
+
+  private async ensureConfigLoaded(): Promise<void> {
+    if (!this.loadConfigPromise) {
+      return;
+    }
+
+    try {
+      await this.loadConfigPromise;
+    } catch {
+      // errors already surfaced via readConfigFromDisk
+    }
+  }
+
+  private async readConfigFromDisk(): Promise<void> {
     const configPath = this.getConfigPath();
     this.validationIssues.clear();
     this.resolvedPathCache = new WeakMap();
 
     try {
-      if (!fs.existsSync(configPath)) {
-        this.config = {};
-        return;
+      let raw: string | undefined;
+      try {
+        raw = await fs.promises.readFile(configPath, "utf8");
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          this.config = {};
+          return;
+        }
+        throw err;
       }
 
-      const raw = fs.readFileSync(configPath, "utf8");
       if (!raw.trim()) {
         this.config = {};
         return;
@@ -1217,6 +1246,7 @@ export class ProjectTreeDataProvider
       this.config = {};
     } finally {
       this.handleValidationWarning();
+      this._onDidChangeTreeData.fire();
     }
   }
 
@@ -1674,9 +1704,8 @@ export class ProjectTreeDataProvider
 
   private async persistChanges(successMessage?: string): Promise<void> {
     await this.saveConfigToDisk();
-    this.loadConfig();
+    await this.reloadConfigFromDisk();
     this.setupWatcher();
-    this._onDidChangeTreeData.fire();
     if (successMessage) {
       vscode.window.showInformationMessage(successMessage);
     }
@@ -1755,8 +1784,7 @@ export class ProjectTreeDataProvider
 
     this.watcherDebounce = setTimeout(() => {
       this.watcherDebounce = undefined;
-      this.loadConfig();
-      this._onDidChangeTreeData.fire();
+      void this.reloadConfigFromDisk();
     }, 200);
   }
 
