@@ -6,6 +6,19 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-12-16
+
+### Changed
+- Category pickers (add, edit and rename flows) now share one streamlined Quick Pick that lets you keep the current category, jump to the root or create a new branch without leaving the dialog.
+- Adding a project from the view toolbar always targets the root, while invoking the command from a category row still drops it inside that category for predictable placement.
+- Config loading became fully asynchronous, so add/edit/remove commands no longer block on disk I/O and react immediately even while the config is being re-read.
+- The projects.json watcher was hardened to recover from deletes or recreations automatically, which keeps the tree in sync with manual edits in external editors.
+- Internal category storage is now strongly typed, simplifying tree rendering and eliminating redundant validation checks.
+
+### Fixed
+- Project paths are normalized through a single code path, so edits that use relative locations, `~/` shortcuts or absolute paths all resolve consistently everywhere in the UI.
+- Removing or moving categories no longer leaves behind orphaned entries because all mutations operate on the structured tree representation.
+
 ## [0.2.0] - 2025-12-13
 
 ### Added

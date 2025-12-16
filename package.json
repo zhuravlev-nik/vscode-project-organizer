@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "publisher": "nzhuravlev",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "engines": {
     "vscode": "^1.107.0"
@@ -122,11 +122,11 @@
           "when": "view == projectTreeView && viewItem == projectTree.project",
           "group": "inline@4"
         },
-      {
-        "command": "projectTree.addProject",
-        "when": "view == projectTreeView && viewItem == projectTree.category",
-        "group": "inline@1"
-      },
+        {
+          "command": "projectTree.addProject",
+          "when": "view == projectTreeView && viewItem == projectTree.category",
+          "group": "inline@1"
+        },
         {
           "command": "projectTree.addCategory",
           "when": "view == projectTreeView && viewItem == projectTree.category",
