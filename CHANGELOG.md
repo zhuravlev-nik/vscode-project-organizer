@@ -7,6 +7,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 ### Fixed
 - Resolved project edit/remove failures for categories containing dots by relying on tree metadata instead of parsing config keys, and cleaned up lint warnings in the open-project commands.
+- Added the missing Russian translation for the “Add Root Category” command so the localized UI is complete.
 
 ## [0.3.3] - 2025-12-16
 

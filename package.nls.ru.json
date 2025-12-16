@@ -8,6 +8,7 @@
   "commands.openHere.title": "Открыть проект (текущее окно)",
   "commands.openNew.title": "Открыть проект (новое окно)",
   "commands.addProject.title": "Добавить проект",
+  "commands.addRootCategory.title": "Добавить корневую категорию",
   "commands.editProject.title": "Редактировать проект",
   "commands.removeProject.title": "Удалить проект",
   "commands.addCategory.title": "Добавить категорию",
