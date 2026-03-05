@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-03-05
+### Fixed
+- Updated the Activity Bar container icon SVG to use theme-aware color (`currentColor`) so the Project Tree icon remains visible on dark and light themes.
+
 ## [0.4.0] - 2025-12-16
 ### Added
 - Built a VS Code + Mocha test harness and expanded coverage to config normalization, tree rendering, path resolution helpers, and category/project command workflows so `npm test` validates the full feature set before publishing.

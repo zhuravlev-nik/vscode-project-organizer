@@ -87,6 +87,51 @@ const CONFIG_ERROR_DESCRIPTION = localize(
 );
 
 export class ProjectTreeItem extends vscode.TreeItem {
+  private static buildProjectTooltip(
+    rawProjectPath?: string,
+    projectPath?: string,
+    errors: string[] = []
+  ): string | undefined {
+    const tooltipParts: string[] = [];
+
+    if (rawProjectPath) {
+      tooltipParts.push(
+        localize(
+          "project.tooltip.originalPath",
+          "Config path: {0}",
+          rawProjectPath
+        )
+      );
+    }
+
+    if (projectPath && projectPath !== rawProjectPath) {
+      tooltipParts.push(
+        localize(
+          "project.tooltip.resolvedPath",
+          "Resolved path: {0}",
+          projectPath
+        )
+      );
+    } else if (projectPath && tooltipParts.length === 0) {
+      tooltipParts.push(projectPath);
+    }
+
+    if (errors.length > 0) {
+      tooltipParts.push(...errors);
+    }
+
+    return tooltipParts.length > 0 ? tooltipParts.join("\n") : undefined;
+  }
+
+  private static resolveProjectIcon(
+    iconId: string | undefined,
+    hasErrors: boolean
+  ): vscode.ThemeIcon {
+    return hasErrors
+      ? new vscode.ThemeIcon("warning")
+      : new vscode.ThemeIcon(iconId ?? "project");
+  }
+
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -103,42 +148,19 @@ export class ProjectTreeItem extends vscode.TreeItem {
   ) {
     super(label, collapsibleState);
     const hasErrors = errors.length > 0;
-    if (nodeType === "project") {
-      const tooltipParts: string[] = [];
-      if (this.rawProjectPath) {
-        tooltipParts.push(
-          localize(
-            "project.tooltip.originalPath",
-            "Config path: {0}",
-            this.rawProjectPath
-          )
-        );
-      }
-      if (this.projectPath && this.projectPath !== this.rawProjectPath) {
-        tooltipParts.push(
-          localize(
-            "project.tooltip.resolvedPath",
-            "Resolved path: {0}",
-            this.projectPath
-          )
-        );
-      } else if (this.projectPath && tooltipParts.length === 0) {
-        tooltipParts.push(this.projectPath);
-      }
-      if (hasErrors) {
-        tooltipParts.push(...errors);
-      }
-      this.tooltip = tooltipParts.length > 0 ? tooltipParts.join("\n") : undefined;
-    } else if (hasErrors) {
-      this.tooltip = errors.join("\n");
-    }
+    this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;
 
     if (nodeType === "project") {
       this.contextValue = "projectTree.project";
-      this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;
-      this.iconPath = hasErrors
-        ? new vscode.ThemeIcon("warning")
-        : new vscode.ThemeIcon(this.iconId ?? "project");
+      this.tooltip = ProjectTreeItem.buildProjectTooltip(
+        this.rawProjectPath,
+        this.projectPath,
+        errors
+      );
+      this.iconPath = ProjectTreeItem.resolveProjectIcon(
+        this.iconId,
+        hasErrors
+      );
       if (this.projectPath) {
         this.command = {
           title: localize(
@@ -151,7 +173,9 @@ export class ProjectTreeItem extends vscode.TreeItem {
       }
     } else {
       this.contextValue = "projectTree.category";
-      this.description = hasErrors ? CONFIG_ERROR_DESCRIPTION : undefined;
+      if (hasErrors) {
+        this.tooltip = errors.join("\n");
+      }
       this.iconPath = new vscode.ThemeIcon("folder");
     }
   }
@@ -172,6 +196,7 @@ export class ProjectTreeDataProvider
   private hadValidationErrors = false;
   private resolvedPathCache: WeakMap<Project, string> = new WeakMap();
   private loadConfigPromise?: Promise<void>;
+  private categoryNodesCache?: Array<{ path: CategoryPath; node: CategoryNode }>;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     void this.reloadConfigFromDisk();
@@ -205,81 +230,11 @@ export class ProjectTreeDataProvider
     }
 
     if (!element) {
-      const items: ProjectTreeItem[] = [];
-      for (const [name, node] of Object.entries(this.config.categories)) {
-        const configPath = name;
-        const categoryPath: CategoryPath = [name];
-        items.push(
-          this.createCategoryTreeItem({
-            label: name,
-            node,
-            configPath,
-            categoryPath
-          })
-        );
-      }
-
-      const rootProjects = this.config.projects;
-      if (Array.isArray(rootProjects)) {
-        rootProjects.forEach((proj, index) => {
-          const projectKey = this.buildProjectKey("__root__", index);
-          items.push(
-            this.createProjectTreeItem({
-              project: proj,
-              configPath: projectKey,
-              categoryPath: [],
-              index
-            })
-          );
-        });
-      }
-      return Promise.resolve(items);
+      return Promise.resolve(this.buildRootItems());
     }
 
     if (element.nodeType === "category" && element.categoryNode) {
-      const node = element.categoryNode;
-      const items: ProjectTreeItem[] = [];
-
-      const currentCategoryPath =
-        element.categoryPath ?? [element.label];
-
-      if (Array.isArray(node.projects)) {
-        node.projects.forEach((proj, index) => {
-          const projectKey = this.buildProjectKey(
-            element.configPath ?? element.label,
-            index
-          );
-          items.push(
-            this.createProjectTreeItem({
-              project: proj,
-              configPath: projectKey,
-              categoryPath: currentCategoryPath,
-              index
-            })
-          );
-        });
-      }
-
-      for (const [key, childNode] of Object.entries(node.categories)) {
-        const childPath = this.joinConfigPath(
-          element.configPath ?? element.label,
-          key
-        );
-        const childSegments: CategoryPath = [
-          ...currentCategoryPath,
-          key
-        ];
-        items.push(
-          this.createCategoryTreeItem({
-            label: key,
-            node: childNode,
-            configPath: childPath,
-            categoryPath: childSegments
-          })
-        );
-      }
-
-      return Promise.resolve(items);
+      return Promise.resolve(this.buildCategoryItems(element));
     }
 
     return Promise.resolve([]);
@@ -327,6 +282,81 @@ export class ProjectTreeDataProvider
     );
   }
 
+  private buildRootItems(): ProjectTreeItem[] {
+    const items: ProjectTreeItem[] = [];
+
+    for (const [name, node] of Object.entries(this.config.categories)) {
+      const configPath = name;
+      const categoryPath: CategoryPath = [name];
+      items.push(
+        this.createCategoryTreeItem({
+          label: name,
+          node,
+          configPath,
+          categoryPath
+        })
+      );
+    }
+
+    this.appendProjectItems(items, this.config.projects, "__root__", []);
+
+    return items;
+  }
+
+  private buildCategoryItems(element: ProjectTreeItem): ProjectTreeItem[] {
+    if (!element.categoryNode) {
+      return [];
+    }
+
+    const node = element.categoryNode;
+    const items: ProjectTreeItem[] = [];
+    const baseKey = element.configPath ?? element.label;
+    const currentCategoryPath = this.getCategoryPathFromItem(element);
+
+    this.appendProjectItems(items, node.projects, baseKey, currentCategoryPath);
+
+    for (const [key, childNode] of Object.entries(node.categories)) {
+      const childPath = this.joinConfigPath(baseKey, key);
+      const childSegments: CategoryPath = [
+        ...currentCategoryPath,
+        key
+      ];
+      items.push(
+        this.createCategoryTreeItem({
+          label: key,
+          node: childNode,
+          configPath: childPath,
+          categoryPath: childSegments
+        })
+      );
+    }
+
+    return items;
+  }
+
+  private appendProjectItems(
+    items: ProjectTreeItem[],
+    projects: Project[] | undefined,
+    configBase: string,
+    categoryPath: CategoryPath
+  ): void {
+    if (!Array.isArray(projects)) {
+      return;
+    }
+
+    projects.forEach((proj, index) => {
+      const projectKey = this.buildProjectKey(configBase, index);
+      items.push(
+        this.createProjectTreeItem({
+          project: proj,
+          configPath: projectKey,
+          categoryPath,
+          index
+        })
+      );
+    });
+  }
+
   refresh(): void {
     void this.reloadConfigFromDisk();
   }
@@ -362,7 +392,7 @@ export class ProjectTreeDataProvider
     let targetPath: CategoryPath = [];
 
     if (targetItem && targetItem.nodeType === "category") {
-      targetPath = targetItem.categoryPath ?? [targetItem.label];
+      targetPath = this.getCategoryPathFromItem(targetItem);
       targetNode = this.getCategoryNodeByPath(targetPath);
     }
 
@@ -633,9 +663,7 @@ export class ProjectTreeDataProvider
 
     const container = this.getCategoryContainer(categoryPath);
     if (!container) {
-      vscode.window.showErrorMessage(
-        localize("error.categoryMissing", "Category entry could not be found in config.")
-      );
+      this.showCategoryMissingError();
       return;
     }
 
@@ -664,9 +692,7 @@ export class ProjectTreeDataProvider
     const destination =
       targetParent.length === 0 ? this.config : this.getCategoryNodeByPath(targetParent);
     if (!destination) {
-      vscode.window.showErrorMessage(
-        localize("error.categoryMissing", "Category entry could not be found in config.")
-      );
+      this.showCategoryMissingError();
       return;
     }
 
@@ -706,17 +732,13 @@ export class ProjectTreeDataProvider
 
     const container = this.getCategoryContainer(categoryPath);
     if (!container) {
-      vscode.window.showErrorMessage(
-        localize("error.categoryMissing", "Category entry could not be found in config.")
-      );
+      this.showCategoryMissingError();
       return;
     }
 
     const categoryNode = container.parent.categories[container.key];
     if (!categoryNode) {
-      vscode.window.showErrorMessage(
-        localize("error.categoryMissing", "Category entry could not be found in config.")
-      );
+      this.showCategoryMissingError();
       return;
     }
     const label = this.formatCategoryPath(categoryPath);
@@ -1052,10 +1074,7 @@ export class ProjectTreeDataProvider
       return undefined;
     }
 
-    const pathSegments = trimmed
-      .split("/")
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0);
+    const pathSegments = this.normalizeCategorySegments(trimmed);
 
     if (pathSegments.length === 0) {
       return undefined;
@@ -1122,15 +1141,7 @@ export class ProjectTreeDataProvider
       return undefined;
     }
 
-    if (item.categoryPath && item.categoryPath.length > 0) {
-      return item.categoryPath;
-    }
-
-    if (item.label) {
-      return [item.label];
-    }
-
-    return undefined;
+    return this.getCategoryPathFromItem(item);
   }
 
   private getCategoryContainer(path: CategoryPath): CategoryContainer | undefined {
@@ -1154,6 +1165,12 @@ export class ProjectTreeDataProvider
       parent: parentNode,
       key
     };
+  }
+
+  private getCategoryPathFromItem(item: ProjectTreeItem): CategoryPath {
+    return item.categoryPath && item.categoryPath.length > 0
+      ? item.categoryPath
+      : [item.label];
   }
 
   private async reloadConfigFromDisk(): Promise<void> {
@@ -1184,6 +1201,7 @@ export class ProjectTreeDataProvider
     const configPath = this.getConfigPath();
     this.validationIssues.clear();
     this.resolvedPathCache = new WeakMap();
+    this.categoryNodesCache = undefined;
 
     try {
       let raw: string | undefined;
@@ -1221,12 +1239,17 @@ export class ProjectTreeDataProvider
   }
 
   private collectCategoryNodes(): Array<{ path: CategoryPath; node: CategoryNode }> {
+    if (this.categoryNodesCache) {
+      return this.categoryNodesCache;
+    }
+
     const result: Array<{ path: CategoryPath; node: CategoryNode }> = [];
 
     for (const [name, node] of Object.entries(this.config.categories)) {
       this.walkCategoryTree(node, [name], result);
     }
 
+    this.categoryNodesCache = result;
     return result;
   }
 
@@ -1381,7 +1404,8 @@ export class ProjectTreeDataProvider
     const pathValue = project.path;
     const iconValue = project.icon;
 
-    if (typeof labelValue !== "string" || !labelValue.trim()) {
+    const label = this.getTrimmedString(labelValue);
+    if (!label) {
       this.recordIssue(
         `${pathKey}.label`,
         localize(
@@ -1391,7 +1415,8 @@ export class ProjectTreeDataProvider
       );
     }
 
-    if (typeof pathValue !== "string" || !pathValue.trim()) {
+    const projectPath = this.getTrimmedString(pathValue);
+    if (!projectPath) {
       this.recordIssue(
         `${pathKey}.path`,
         localize(
@@ -1403,8 +1428,9 @@ export class ProjectTreeDataProvider
 
     let resolvedIcon: string | undefined;
     if (iconValue !== undefined) {
-      if (typeof iconValue === "string" && iconValue.trim()) {
-        resolvedIcon = iconValue.trim();
+      const icon = this.getTrimmedString(iconValue);
+      if (icon) {
+        resolvedIcon = icon;
       } else {
         this.recordIssue(
           `${pathKey}.icon`,
@@ -1414,14 +1440,8 @@ export class ProjectTreeDataProvider
     }
 
     return {
-      label:
-        typeof labelValue === "string" && labelValue.trim()
-          ? labelValue
-          : localize("label.untitledProject", "Untitled"),
-      path:
-        typeof pathValue === "string" && pathValue.trim()
-          ? pathValue
-          : "",
+      label: label ?? localize("label.untitledProject", "Untitled"),
+      path: projectPath ?? "",
       icon: resolvedIcon
     };
   }
@@ -1506,6 +1526,7 @@ export class ProjectTreeDataProvider
       if (!next) {
         next = { categories: {} };
         current.categories[segment] = next;
+        this.categoryNodesCache = undefined;
       }
       current = next;
     }
@@ -1527,24 +1548,18 @@ export class ProjectTreeDataProvider
     const index = item.projectIndex ?? parsed?.index;
 
     if (!categoryPath || index === undefined) {
-      vscode.window.showErrorMessage(
-        localize("error.projectMissing", "Project entry could not be found in config.")
-      );
+      this.showProjectMissingError();
       return undefined;
     }
 
     const targetNode = this.getCategoryNodeByPath(categoryPath);
     if (!targetNode || !Array.isArray(targetNode.projects)) {
-      vscode.window.showErrorMessage(
-        localize("error.projectMissing", "Project entry could not be found in config.")
-      );
+      this.showProjectMissingError();
       return undefined;
     }
 
     if (index < 0 || index >= targetNode.projects.length) {
-      vscode.window.showErrorMessage(
-        localize("error.projectMissing", "Project entry could not be found in config.")
-      );
+      this.showProjectMissingError();
       return undefined;
     }
 
@@ -1695,8 +1710,29 @@ export class ProjectTreeDataProvider
     this.validationIssues.set(key, bucket);
   }
 
+  private showCategoryMissingError(): void {
+    vscode.window.showErrorMessage(
+      localize("error.categoryMissing", "Category entry could not be found in config.")
+    );
+  }
+
+  private showProjectMissingError(): void {
+    vscode.window.showErrorMessage(
+      localize("error.projectMissing", "Project entry could not be found in config.")
+    );
+  }
+
   private isPlainObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  private getTrimmedString(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
   }
 
   private setupWatcher(): void {
